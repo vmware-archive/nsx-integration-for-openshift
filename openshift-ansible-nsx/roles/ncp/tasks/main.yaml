@@ -1,0 +1,185 @@
+---
+## Configure Service Account for NCP
+- name: Check if nsx-system project exists
+  command: oc get project nsx-system
+  register: nsx_project_result
+  ignore_errors: True
+
+- name: Display the output msg
+  debug:
+    msg: "{{ nsx_project_result }}"
+
+- name: Create the project if it doesn't exist
+  command: oc new-project nsx-system
+  when: "'Error' in nsx_project_result.stderr"
+
+- command: oc project nsx-system
+
+# If a different service account name, need to update ncp/agent yaml accordingly
+- name: Check NCP service account
+  command: oc get serviceaccount default
+  register: ncp_sa_result
+  ignore_errors: True
+
+- name: Display the output msg
+  debug:
+    msg: "{{ ncp_sa_result }}"
+
+- name: Create a serviceaccount for NCP if not found
+  command: oc create serviceaccount default
+  when: "'Error' in ncp_sa_result.stderr"
+
+- name: Add cluster admin role to NCP service account
+  command: oadm policy add-cluster-role-to-user cluster-admin system:serviceaccount:nsx-system:default
+
+- name: check if /etc/nsx-ujo dir exists
+  stat:
+    path: /etc/nsx-ujo
+  register: ujo_exists
+
+- name: Create dir if missing
+  file: path=/etc/nsx-ujo state=directory
+  when:
+    ujo_exists.stat.exists == False
+
+- name: Check if a token file is already present
+  stat:
+      path: /etc/nsx-ujo/default_token
+  register: token_exists
+
+- name: Get token name
+  shell: "kubectl get serviceaccount default -o yaml | grep -A1 secrets | tail -n1 | awk {'print $3'}"
+  register: secret_result
+
+- name: Copy token to file
+  shell: "kubectl get secret {{ secret_result.stdout }} -o yaml | grep 'token:' | awk {'print $2'} | base64 -d > /etc/nsx-ujo/default_token"
+
+## Configure Security Context Constraint for NCP
+- name: Download ncp-scc yaml
+  get_url:
+    url: "{{ ncp_scc_yaml_url }}"
+    dest: /tmp/ncp-scc.yaml
+    force: yes
+
+- name: Load ncp-scc
+  command: oc apply -f /tmp/ncp-scc.yaml
+
+- name: Add user to ncp-scc
+  command: oadm policy add-scc-to-user ncp-scc -z default
+
+### Obtain YAML files to run NCP and nsx-node-agent
+- name: Download NCP yaml
+  get_url:
+    url: "{{ ncp_yaml_url }}"
+    dest: /tmp/ncp-rc.yml
+    force: yes
+
+# http://docs.ansible.com/ansible/lineinfile_module.html
+# http://www.mydailytutorials.com/ansible-lineinfile-module-examples/
+- name: set cluster name
+  lineinfile:
+    path: /tmp/ncp-rc.yml
+    regexp: "^ *# cluster = k8scluster"
+    line: "    cluster = {{ cluster_name }}"
+
+- name: set apiserver host IP
+  lineinfile:
+    path: /tmp/ncp-rc.yml
+    regexp: "^ *#apiserver_host_ip = <ip_address>"
+    line: "    apiserver_host_ip = {{ apiserver_host_ip }}"
+
+- name: set apiserver host port
+  lineinfile:
+    path: /tmp/ncp-rc.yml
+    regexp: "^ *#apiserver_host_port = <port>"
+    line: "    apiserver_host_port = 8443"
+
+- name: set NSX manager IP
+  lineinfile:
+    path: /tmp/ncp-rc.yml
+    regexp: "^ *#nsx_api_managers = <ip_address>"
+    line: "    nsx_api_managers = {{ nsx_manager_ip }}"
+
+- name: set docker image name
+  lineinfile:
+    path: /tmp/ncp-rc.yml
+    regexp: "^ *image: nsx-ncp"
+    line: "          image: {{ ncp_image_name }}"
+
+- name: start NCP Replication Controller
+  command: oc apply -f /tmp/ncp-rc.yml
+
+## nsx-node-agent YAML
+- name: Download agent yaml
+  get_url:
+    url: "{{ agent_yaml_url }}"
+    dest: /tmp/nsx-node-agent-ds.yml
+
+- name: set cluster name
+  lineinfile:
+    path: /tmp/nsx-node-agent-ds.yml
+    regexp: "^ *# cluster = k8scluster"
+    line: "    cluster = {{ cluster_name }}"
+
+- name: set apiserver host IP
+  lineinfile:
+    path: /tmp/nsx-node-agent-ds.yml
+    regexp: "^ *#apiserver_host_ip = <ip_address>"
+    line: "    apiserver_host_ip = {{ apiserver_host_ip }}"
+
+- name: set apiserver host port
+  lineinfile:
+    path: /tmp/nsx-node-agent-ds.yml
+    regexp: "^ *#apiserver_host_port = <port>"
+    line: "    apiserver_host_port = 8443"
+
+- name: set NSX manager IP
+  lineinfile:
+    path: /tmp/nsx-node-agent-ds.yml
+    regexp: "^ *#nsx_api_managers = <ip_address>"
+    line: "    nsx_api_managers = {{ nsx_manager_ip }}"
+
+- name: Node agent proc mount path
+  lineinfile:
+    path: /tmp/nsx-node-agent-ds.yml
+    regexp: "^ *#proc_mount_path_prefix = /host"
+    line: "    proc_mount_path_prefix = /host"
+
+- name: Node agent - enable hyperbus
+  lineinfile:
+    path: /tmp/nsx-node-agent-ds.yml
+    regexp: "^ *#enable_hyperbus = True"
+    line: "    enable_hyperbus = True"
+
+- name: Node agent - rpc server ip
+  lineinfile:
+    path: /tmp/nsx-node-agent-ds.yml
+    regexp: "^ *#nsxrpc_cip = 169.254.1.0/31"
+    line: "    nsxrpc_cip = 169.254.1.0/31"
+
+- name: Node agent - rpc port
+  lineinfile:
+    path: /tmp/nsx-node-agent-ds.yml
+    regexp: "^ *#nsxrpc_port = 2345"
+    line: "    nsxrpc_port = 2345"
+
+- name: Node agent - rpc vlan
+  lineinfile:
+    path: /tmp/nsx-node-agent-ds.yml
+    regexp: "^ *#nsxrpc_vlan = 4094"
+    line: "    nsxrpc_vlan = 4094"
+
+- name: Node agent - keepalive interval
+  lineinfile:
+    path: /tmp/nsx-node-agent-ds.yml
+    regexp: "^ *#nsxrpc_keepalive_interval = 3"
+    line: "    nsxrpc_keepalive_interval = 3"
+
+- name: set docker image name
+  lineinfile:
+    path: /tmp/nsx-node-agent-ds.yml
+    regexp: "^ *image: nsx-ncp"
+    line: "          image: {{ ncp_image_name }}"
+
+- name: start nsx-node-agent DaemonSet
+  command: oc apply -f /tmp/nsx-node-agent-ds.yml

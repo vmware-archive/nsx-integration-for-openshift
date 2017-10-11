@@ -1,0 +1,51 @@
+[masters]
+admin.rhel.osmaster ansible_ssh_host=101.101.101.4
+
+[single_master]
+admin.rhel.osmaster ansible_ssh_host=101.101.101.4
+
+[etcd]
+osmaster
+
+[nodes]
+admin.rhel.osmaster ansible_ssh_host=101.101.101.4 openshift_ip=101.101.101.4 openshift_schedulable=true openshift_hostname=admin.rhel.osmaster
+admin.rhel.osnode ansible_ssh_host=101.101.101.5 openshift_ip=101.101.101.5 openshift_hostname=admin.rhel.osnode
+
+
+[nodes:vars]
+openshift_node_labels="{'region': 'primary', 'zone': 'east'}"
+
+
+[masters:vars]
+openshift_node_labels="{'region': 'infra', 'zone': 'default'}"
+
+
+# Create an OSEv3 group that contains the masters and nodes groups
+[OSEv3:children]
+masters
+nodes
+etcd
+
+
+# Set variables common for all OSEv3 hosts
+[OSEv3:vars]
+# SSH user, this user should allow ssh based auth without requiring a password
+ansible_ssh_user=root
+openshift_master_default_subdomain=apps.yves.local
+
+# Tell OpenShift to use CNI for networking
+os_sdn_network_plugin_name=cni
+openshift_use_openshift_sdn=false
+
+openshift_node_sdn_mtu=1500
+
+# Replace origin with openshift-enterprise if Enterprise version is desired
+deployment_type=origin
+
+# In test/dev environment, these requirements may not be satisfied, so skip the checks.
+# However it's recommended to enable them for production environment (comment it out to enable).
+openshift_disable_check=disk_availability,memory_availability,docker_storage
+
+# uncomment the following to enable htpasswd authentication; defaults to DenyAllPasswordIdentityProvider
+openshift_master_identity_providers=[{'name': 'htpasswd_auth', 'login': 'true', 'challenge': 'true', 'kind': 'HTPasswdPasswordIdentityProvider', 'filename': '/etc/origin/master/htpasswd'}]
+openshift_master_htpasswd_file=/root/htpasswd

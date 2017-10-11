@@ -1,0 +1,70 @@
+---
+- name: Download CNI rpm
+  get_url:
+    url: "{{ cni_url }}"
+    dest: /tmp/cni.rpm
+
+- name: Install CNI
+  yum:
+    name: /tmp/cni.rpm
+    state: present
+
+- name: Download OVS
+  get_url:
+    url: "{{ ovs_url }}"
+    dest: /tmp/ovs.rpm
+
+- name: Download OVS kmod1
+  get_url:
+    url: "{{ ovs_kmod1_url }}"
+    dest: /tmp/ovs_kmod.rpm
+
+- name: Download OVS kmod2
+  get_url:
+    url: "{{ ovs_kmod2_url }}"
+    dest: /tmp/kmod_ovs.rpm
+
+- name: Install OVS
+  yum:
+    name: /tmp/ovs.rpm
+    state: present
+  tags: ovs
+
+- name: Install OVS 2.6 Kernel Modules - 1
+  yum:
+    name: /tmp/ovs_kmod.rpm
+    state: present
+  tags: ovs
+
+- name: Install OVS 2.6 Kernel Modules - 2
+  yum:
+    name: /tmp/kmod_ovs.rpm
+    state: present
+
+# https://docs.ansible.com/ansible/systemd_module.html
+# systemctl start openvswitch.service
+- name: Start OVS service
+  systemd:
+    name: openvswitch
+    state: started
+
+- name: Create OVS bridge
+  openvswitch_bridge: bridge=br-int state=present fail_mode=standalone
+  args:
+    external_ids:
+        bridge-id: "br-int"
+  tags: ovs
+
+- name: Add the Uplink Port to OVS
+  openvswitch_port:
+    bridge: br-int
+    port: "{{ uplink_port }}"
+    state: present
+    set: Interface {{ uplink_port }} ofport_request=1
+  tags: ovs
+
+- name: Bring up br-int
+  command: "ip link set br-int up"
+
+- name: Bring up node-if
+  command: "ip link set {{ uplink_port }} up"

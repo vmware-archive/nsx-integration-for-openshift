@@ -1,0 +1,4 @@
+---
+- name: NSX management plane resource configuration
+  command: "python {{ nsx_config_script_path }} --cert {{ nsx_cert_file_path }} --mp {{ nsx_manager_ip }} --k8scluster {{ os_cluster_name }} --edge_cluster {{ nsx_edge_cluster_name }} --tz {{ nsx_transport_zone_name }} --t0 {{ nsx_t0_router_name }} --pod_ipblock_name {{ pod_ipblock_name }} --pod_ipblock_cidr {{ pod_ipblock_cidr }} --snat_ipblock_name {{ snat_ipblock_name }} --snat_ipblock_cidr {{ snat_ipblock_cidr }} --mac {{ vnic_mac_list }} --node {{ os_node_name_list }} --node_ls {{ nsx_node_ls_name }}"
+  when: perform_nsx_config == True

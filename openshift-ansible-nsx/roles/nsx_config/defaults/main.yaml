@@ -1,0 +1,16 @@
+---
+perform_nsx_config: True
+nsx_config_script_path: <nsx_config_script_path>
+nsx_cert_file_path: <nsx_cert_file_path>
+nsx_manager_ip: <ip>
+nsx_edge_cluster_name: <nsx_edge_cluster_name>
+nsx_transport_zone_name: <nsx_transport_zone_name>
+nsx_t0_router_name: <nsx_t0_router_name>
+pod_ipblock_name: <pod_ip_block_name>
+pod_ipblock_cidr: <pod_ip_block_cidr>
+snat_ipblock_name: <snat_ip_block_name>
+snat_ipblock_cidr: <snat_ip_block_cidr>
+vnic_mac_list: <vnic_mac_list>
+os_node_name_list: <os_node_name_list>
+nsx_node_ls_name: <nsx_node_ls_name>
+os_cluster_name: <os_cluster_name>

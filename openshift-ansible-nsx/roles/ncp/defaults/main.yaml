@@ -1,0 +1,9 @@
+---
+# update the variable values below before running the ncp role
+ncp_scc_yaml_url: http://build-squid.eng.vmware.com/build/mts/release/bora-<build_id>/publish/openshift/ncp-scc.yaml
+ncp_yaml_url: http://build-squid.eng.vmware.com/build/mts/release/bora-<build_id>/publish/ncp-rc.yml
+agent_yaml_url: http://build-squid.eng.vmware.com/build/mts/release/bora-<build_id>/publish/nsx-node-agent-ds.yml
+cluster_name: <cluster_name>
+apiserver_host_ip: <host_ip>
+nsx_manager_ip: <manager_ip>
+ncp_image_name: <image_name>

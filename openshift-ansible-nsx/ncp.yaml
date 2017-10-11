@@ -1,0 +1,6 @@
+# to run: ansible-playbook -i /PATH/TO/HOSTS/hosts ncp.yaml
+---
+# run ncp role to bring up the NCP and agent pods
+- hosts: single_master
+  roles:
+    - ncp
