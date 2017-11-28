@@ -7,3 +7,5 @@ cluster_name: <cluster_name>
 apiserver_host_ip: <host_ip>
 nsx_manager_ip: <manager_ip>
 ncp_image_name: <image_name>
+nsx_api_user: <nsx_api_username>
+nsx_api_password: <nsx_api_password>

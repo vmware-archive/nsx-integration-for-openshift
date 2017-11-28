@@ -79,7 +79,7 @@
 - name: set cluster name
   lineinfile:
     path: /tmp/ncp-rc.yml
-    regexp: "^ *# cluster = k8scluster"
+    regexp: "^ *#cluster = k8scluster"
     line: "    cluster = {{ cluster_name }}"
 
 - name: set apiserver host IP
@@ -99,6 +99,20 @@
     path: /tmp/ncp-rc.yml
     regexp: "^ *#nsx_api_managers = <ip_address>"
     line: "    nsx_api_managers = {{ nsx_manager_ip }}"
+
+- name: set NSX API password
+  lineinfile:
+    path: /tmp/ncp-rc.yml
+    regexp: "^    nsx_api_password"
+    insertafter: "^ *nsx_api_managers"
+    line: "    nsx_api_password = {{ nsx_api_password }}"
+
+- name: set NSX API username
+  lineinfile:
+    path: /tmp/ncp-rc.yml
+    regexp: "^    nsx_api_user"
+    insertafter: "^ *nsx_api_managers"
+    line: "    nsx_api_user = {{ nsx_api_user }}"
 
 - name: set docker image name
   lineinfile:
@@ -118,7 +132,7 @@
 - name: set cluster name
   lineinfile:
     path: /tmp/nsx-node-agent-ds.yml
-    regexp: "^ *# cluster = k8scluster"
+    regexp: "^ *#cluster = k8scluster"
     line: "    cluster = {{ cluster_name }}"
 
 - name: set apiserver host IP
@@ -133,23 +147,11 @@
     regexp: "^ *#apiserver_host_port = <port>"
     line: "    apiserver_host_port = 8443"
 
-- name: set NSX manager IP
-  lineinfile:
-    path: /tmp/nsx-node-agent-ds.yml
-    regexp: "^ *#nsx_api_managers = <ip_address>"
-    line: "    nsx_api_managers = {{ nsx_manager_ip }}"
-
 - name: Node agent proc mount path
   lineinfile:
     path: /tmp/nsx-node-agent-ds.yml
     regexp: "^ *#proc_mount_path_prefix = /host"
     line: "    proc_mount_path_prefix = /host"
-
-- name: Node agent - enable hyperbus
-  lineinfile:
-    path: /tmp/nsx-node-agent-ds.yml
-    regexp: "^ *#enable_hyperbus = True"
-    line: "    enable_hyperbus = True"
 
 - name: Node agent - rpc server ip
   lineinfile:
