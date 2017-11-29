@@ -79,25 +79,25 @@
 - name: set cluster name
   lineinfile:
     path: /tmp/ncp-rc.yml
-    regexp: "^ *#cluster = k8scluster"
+    regexp: "^ *#?cluster =.*"
     line: "    cluster = {{ cluster_name }}"
 
 - name: set apiserver host IP
   lineinfile:
     path: /tmp/ncp-rc.yml
-    regexp: "^ *#apiserver_host_ip = <ip_address>"
+    regexp: "^ *#?apiserver_host_ip =.*"
     line: "    apiserver_host_ip = {{ apiserver_host_ip }}"
 
 - name: set apiserver host port
   lineinfile:
     path: /tmp/ncp-rc.yml
-    regexp: "^ *#apiserver_host_port = <port>"
+    regexp: "^ *#?apiserver_host_port =.*"
     line: "    apiserver_host_port = 8443"
 
 - name: set NSX manager IP
   lineinfile:
     path: /tmp/ncp-rc.yml
-    regexp: "^ *#nsx_api_managers = <ip_address>"
+    regexp: "^ *#?nsx_api_managers =.*"
     line: "    nsx_api_managers = {{ nsx_manager_ip }}"
 
 - name: set NSX API password
@@ -132,56 +132,26 @@
 - name: set cluster name
   lineinfile:
     path: /tmp/nsx-node-agent-ds.yml
-    regexp: "^ *#cluster = k8scluster"
+    regexp: "^ *#?cluster =.*"
     line: "    cluster = {{ cluster_name }}"
 
 - name: set apiserver host IP
   lineinfile:
     path: /tmp/nsx-node-agent-ds.yml
-    regexp: "^ *#apiserver_host_ip = <ip_address>"
+    regexp: "^ *#?apiserver_host_ip =.*"
     line: "    apiserver_host_ip = {{ apiserver_host_ip }}"
 
 - name: set apiserver host port
   lineinfile:
     path: /tmp/nsx-node-agent-ds.yml
-    regexp: "^ *#apiserver_host_port = <port>"
+    regexp: "^ *#?apiserver_host_port =.*"
     line: "    apiserver_host_port = 8443"
 
-- name: Node agent proc mount path
-  lineinfile:
-    path: /tmp/nsx-node-agent-ds.yml
-    regexp: "^ *#proc_mount_path_prefix = /host"
-    line: "    proc_mount_path_prefix = /host"
-
-- name: Node agent - rpc server ip
-  lineinfile:
-    path: /tmp/nsx-node-agent-ds.yml
-    regexp: "^ *#nsxrpc_cip = 169.254.1.0/31"
-    line: "    nsxrpc_cip = 169.254.1.0/31"
-
-- name: Node agent - rpc port
-  lineinfile:
-    path: /tmp/nsx-node-agent-ds.yml
-    regexp: "^ *#nsxrpc_port = 2345"
-    line: "    nsxrpc_port = 2345"
-
-- name: Node agent - rpc vlan
-  lineinfile:
-    path: /tmp/nsx-node-agent-ds.yml
-    regexp: "^ *#nsxrpc_vlan = 4094"
-    line: "    nsxrpc_vlan = 4094"
-
-- name: Node agent - keepalive interval
-  lineinfile:
-    path: /tmp/nsx-node-agent-ds.yml
-    regexp: "^ *#nsxrpc_keepalive_interval = 3"
-    line: "    nsxrpc_keepalive_interval = 3"
-
 - name: set docker image name
-  lineinfile:
+  replace:
     path: /tmp/nsx-node-agent-ds.yml
-    regexp: "^ *image: nsx-ncp"
-    line: "          image: {{ ncp_image_name }}"
+    regexp: "^ *image: nsx-ncp$"
+    replace: "          image: {{ ncp_image_name }}"
 
 - name: start nsx-node-agent DaemonSet
   command: oc apply -f /tmp/nsx-node-agent-ds.yml
