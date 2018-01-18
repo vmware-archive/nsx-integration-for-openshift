@@ -15,22 +15,35 @@
 
 - command: oc project nsx-system
 
-# If a different service account name, need to update ncp/agent yaml accordingly
-- name: Check NCP service account
-  command: oc get serviceaccount default
-  register: ncp_sa_result
-  ignore_errors: True
+- name: Download ncp-rbac
+  get_url:
+    url: "{{ ncp_rbac_yaml_url }}"
+    dest: /tmp/ncp-rbac.yml
+    force: yes
 
-- name: Display the output msg
-  debug:
-    msg: "{{ ncp_sa_result }}"
+- name: Change API version for ncp-rbac
+  replace:
+    path: /tmp/ncp-rbac.yml
+    regexp: "^apiVersion: rbac.authorization.k8s.io/v1.*"
+    replace: "apiVersion: v1"
 
-- name: Create a serviceaccount for NCP if not found
-  command: oc create serviceaccount default
-  when: "'Error' in ncp_sa_result.stderr"
+- name: Apply ncp-rbac
+  command: oc apply -f /tmp/ncp-rbac.yml
 
-- name: Add cluster admin role to NCP service account
-  command: oadm policy add-cluster-role-to-user cluster-admin system:serviceaccount:nsx-system:default
+- name: Download nsx-node-agent-rbac
+  get_url:
+    url: "{{ nsx_node_agent_rbac_yaml_url }}"
+    dest: /tmp/nsx-node-agent-rbac.yml
+    force: yes
+
+- name: Change API version for nsx-node-agent-rbac
+  replace:
+    path: /tmp/nsx-node-agent-rbac.yml
+    regexp: "^apiVersion: rbac.authorization.k8s.io/v1beta1"
+    replace: "apiVersion: v1"
+
+- name: Apply nsx-node-agent-rbac
+  command: oc apply -f /tmp/nsx-node-agent-rbac.yml
 
 - name: check if /etc/nsx-ujo dir exists
   stat:
@@ -44,28 +57,43 @@
 
 - name: Check if a token file is already present
   stat:
-      path: /etc/nsx-ujo/default_token
-  register: token_exists
+      path: /etc/nsx-ujo/ncp_token
+  register: ncp_exists
 
-- name: Get token name
-  shell: "kubectl get serviceaccount default -o yaml | grep -A1 secrets | tail -n1 | awk {'print $3'}"
-  register: secret_result
+- name: Get token name for ncp
+  shell: "kubectl get serviceaccount ncp-svc-account -o yaml | grep -A1 secrets | tail -n1 | awk {'print $3'}"
+  register: ncp_secret_result
 
-- name: Copy token to file
-  shell: "kubectl get secret {{ secret_result.stdout }} -o yaml | grep 'token:' | awk {'print $2'} | base64 -d > /etc/nsx-ujo/default_token"
+- name: Copy ncp token to file
+  shell: "kubectl get secret {{ ncp_secret_result.stdout }} -o yaml | grep 'token:' | awk {'print $2'} | base64 -d > /etc/nsx-ujo/ncp_token"
+
+- name: Check if a token file is already present
+  stat:
+      path: /etc/nsx-ujo/node_agent_token
+  register: node_agent_exists
+
+- name: Get node agent token name
+  shell: "kubectl get serviceaccount nsx-node-agent-svc-account -o yaml | grep -A1 secrets | tail -n1 | awk {'print $3'}"
+  register: node_agent_secret_result
+
+- name: Copy node agent to file
+  shell: "kubectl get secret {{ node_agent_secret_result.stdout }} -o yaml | grep 'token:' | awk {'print $2'} | base64 -d > /etc/nsx-ujo/node_agent_token"
 
 ## Configure Security Context Constraint for NCP
-- name: Download ncp-scc yaml
+- name: Download ncp-os-scc yaml
   get_url:
     url: "{{ ncp_scc_yaml_url }}"
-    dest: /tmp/ncp-scc.yaml
+    dest: /tmp/ncp-os-scc.yml
     force: yes
 
 - name: Load ncp-scc
-  command: oc apply -f /tmp/ncp-scc.yaml
+  command: oc apply -f /tmp/ncp-os-scc.yml
 
-- name: Add user to ncp-scc
-  command: oadm policy add-scc-to-user ncp-scc -z default
+- name: Add nsx-node-agent-svc-account to ncp-scc
+  command: oadm policy add-scc-to-user ncp-scc -z ncp-svc-account
+
+- name: Add nsx-node-agent-svc-account to ncp-scc
+  command: oadm policy add-scc-to-user ncp-scc -z nsx-node-agent-svc-account
 
 ### Obtain YAML files to run NCP and nsx-node-agent
 - name: Download NCP yaml
@@ -74,53 +102,116 @@
     dest: /tmp/ncp-rc.yml
     force: yes
 
-# http://docs.ansible.com/ansible/lineinfile_module.html
-# http://www.mydailytutorials.com/ansible-lineinfile-module-examples/
-- name: set cluster name
+- name: Set service account for ncp
+  replace:
+    path: /tmp/ncp-rc.yml
+    regexp: "#serviceAccountName: ncp-svc-account"
+    replace: "serviceAccountName: ncp-svc-account"
+
+- name: Set cluster name
   lineinfile:
     path: /tmp/ncp-rc.yml
     regexp: "^ *#?cluster =.*"
     line: "    cluster = {{ cluster_name }}"
 
-- name: set apiserver host IP
+- name: Set apiserver host IP
   lineinfile:
     path: /tmp/ncp-rc.yml
     regexp: "^ *#?apiserver_host_ip =.*"
     line: "    apiserver_host_ip = {{ apiserver_host_ip }}"
 
-- name: set apiserver host port
+- name: Set apiserver host port
   lineinfile:
     path: /tmp/ncp-rc.yml
     regexp: "^ *#?apiserver_host_port =.*"
     line: "    apiserver_host_port = 8443"
 
-- name: set NSX manager IP
+- name: Set NSX manager IP
   lineinfile:
     path: /tmp/ncp-rc.yml
     regexp: "^ *#?nsx_api_managers =.*"
     line: "    nsx_api_managers = {{ nsx_manager_ip }}"
 
-- name: set NSX API password
+- name: Set NSX API password
   lineinfile:
     path: /tmp/ncp-rc.yml
     regexp: "^    nsx_api_password"
     insertafter: "^ *nsx_api_managers"
     line: "    nsx_api_password = {{ nsx_api_password }}"
+  when: use_cert != true
 
-- name: set NSX API username
+- name: Set NSX API username
   lineinfile:
     path: /tmp/ncp-rc.yml
     regexp: "^    nsx_api_user"
     insertafter: "^ *nsx_api_managers"
     line: "    nsx_api_user = {{ nsx_api_user }}"
+  when: use_cert != true
 
-- name: set docker image name
+- name: Skip checking certs
   lineinfile:
     path: /tmp/ncp-rc.yml
-    regexp: "^ *image: nsx-ncp"
-    line: "          image: {{ ncp_image_name }}"
+    regexp: "^ *#?insecure =.*"
+    line: "    insecure = True"
 
-- name: start NCP Replication Controller
+- name: Set certificate info if set cert is set to true
+  replace:
+      path: /tmp/ncp-rc.yml
+      regexp: "#nsx_api_cert_file = <None>"
+      replace: "nsx_api_cert_file = /etc/nsx-ujo/nsx_cert"
+  when: use_cert == true
+
+- name: Set private key if set cert is set to true
+  replace:
+        path: /tmp/ncp-rc.yml
+        regexp: "#nsx_api_private_key_file = <None>"
+        replace: "nsx_api_private_key_file = /etc/nsx-ujo/nsx_priv_key"
+  when: use_cert == true
+
+# Ensure idempotency
+- name: Check whether /tmp/ncp-rc.yml contains "nsx-priv-key"
+  command: grep "nsx-priv-key" /tmp/ncp-rc.yml
+  register: checkpriv
+  ignore_errors: yes
+
+- name: if /tmp/ncp-rc.yml does not contain "nsx-priv-key"
+  lineinfile:
+      path: /tmp/ncp-rc.yml
+      regexp: "^    volumeMounts"
+      insertafter: "^ *volumeMounts:"
+      line: "          - name: nsx-priv-key\n            mountPath: /etc/nsx-ujo/nsx_priv_key"
+  when: checkpriv.rc != 0
+
+- name: Greet the world if /tmp/ncp-rc.yml contains "nsx-priv-key"
+  lineinfile:
+      path: /tmp/ncp-rc.yml
+      regexp: "^    volumes"
+      insertafter: "^ *volumes:"
+      line: "        - name: nsx-priv-key\n          hostPath:\n            path: {{ nsx_api_private_key_file }}"
+  when: checkpriv.rc != 0
+
+- name: Check whether /tmp/ncp-rc.yml contains "nsx-cert"
+  command: grep "nsx-cert" /tmp/ncp-rc.yml
+  register: checkcert
+  ignore_errors: yes
+
+- name: if /tmp/ncp-rc.yml does not contain "nsx-cert"
+  lineinfile:
+      path: /tmp/ncp-rc.yml
+      regexp: "^    volumeMounts"
+      insertafter: "^ *volumeMounts:"
+      line: "          - name: nsx-cert\n            mountPath: /etc/nsx-ujo/nsx_cert"
+  when: checkcert.rc != 0 and use_cert == true
+
+- name: Greet the world if /tmp/ncp-rc.yml contains "nsx-cert"
+  lineinfile:
+      path: /tmp/ncp-rc.yml
+      regexp: "^    volumes"
+      insertafter: "^ *volumes:"
+      line: "        - name: nsx-cert\n          hostPath:\n            path: {{ nsx_api_cert_file }}"
+  when: checkcert.rc != 0 and use_cert == true
+
+- name: Start NCP Replication Controller
   command: oc apply -f /tmp/ncp-rc.yml
 
 ## nsx-node-agent YAML
@@ -129,29 +220,42 @@
     url: "{{ agent_yaml_url }}"
     dest: /tmp/nsx-node-agent-ds.yml
 
-- name: set cluster name
+- name: Set service account for ncp
+  replace:
+    path: /tmp/nsx-node-agent-ds.yml
+    regexp: "#serviceAccountName: nsx-node-agent-svc-account"
+    replace: "serviceAccountName: nsx-node-agent-svc-account"
+
+- name: Set cluster name
   lineinfile:
     path: /tmp/nsx-node-agent-ds.yml
     regexp: "^ *#?cluster =.*"
     line: "    cluster = {{ cluster_name }}"
 
-- name: set apiserver host IP
+- name: Set apiserver host IP
   lineinfile:
     path: /tmp/nsx-node-agent-ds.yml
     regexp: "^ *#?apiserver_host_ip =.*"
     line: "    apiserver_host_ip = {{ apiserver_host_ip }}"
 
-- name: set apiserver host port
+- name: Set apiserver host port
   lineinfile:
     path: /tmp/nsx-node-agent-ds.yml
     regexp: "^ *#?apiserver_host_port =.*"
     line: "    apiserver_host_port = 8443"
 
-- name: set docker image name
-  replace:
-    path: /tmp/nsx-node-agent-ds.yml
-    regexp: "^ *image: nsx-ncp$"
-    replace: "          image: {{ ncp_image_name }}"
-
-- name: start nsx-node-agent DaemonSet
+- name: Start nsx-node-agent DaemonSet
   command: oc apply -f /tmp/nsx-node-agent-ds.yml
+
+# After ncp starts, start Openshift Registry and Router service
+- name: Start Openshift Router service
+  command: oadm router router --service-account=router
+
+# In OS 3.7, if you have "registry" service account or "registry-registry-role"
+# created, it will "fail" with "error" as below:
+# serviceaccounts "registry" already exists
+# clusterrole "registry-registry-role" already exists
+# this should just be a warning as you'd get in adding router.
+# You can ignore this as the registry will be created successfully anyway
+- name: Start Openshift Registry service
+  command: oadm registry --service-account=registry

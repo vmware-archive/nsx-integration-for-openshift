@@ -1,7 +1,8 @@
 ---
 # update the variable values below before running the ncp_prep role
-cni_url: <cni_url>
-ovs_url: <ovs_url>
-ovs_kmod1_url: <ovs_kmod1_url>
-ovs_kmod2_url: <ovs_kmod2_url>
+cni_url: http://build-squid.eng.vmware.com/build/mts/release/bora-<build_id>/publish/rhel_x86_64/nsx-cni-2.1.0.0.0.<build_id>-1.x86_64.rpm
+ovs_url: http://build-squid.eng.vmware.com/build/mts/release/bora-<build_id>/publish/rhel_x86_64/openvswitch-2.7.0.<build_id>-1.x86_64.rpm
+ovs_kmod1_url: http://build-squid.eng.vmware.com/build/mts/release/bora-<build_id>/publish/rhel_x86_64/kmod-openvswitch-2.7.0.<build_id>-1.el7.x86_64.rpm
+ovs_kmod2_url: http://build-squid.eng.vmware.com/build/mts/release/bora-<build_id>/publish/rhel_x86_64/openvswitch-kmod-2.7.0.<build_id>-1.el7.x86_64.rpm
 uplink_port: <uplink_port>
+ncp_image_url: <image_url>

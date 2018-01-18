@@ -38,3 +38,12 @@ os_sdn_network_plugin_name=cni
 openshift_use_openshift_sdn=false
 
 openshift_node_sdn_mtu=1500
+
+# In test/dev environment, these requirements may not be satisfied, so skip the checks.
+# However it's recommended to enable them for production environment (comment it out to enable).
+openshift_disable_check=disk_availability,memory_availability,docker_storage,package_version
+
+# Disable Openshift to manage the registry and docker
+openshift_hosted_manage_registry=false
+openshift_hosted_manage_router=false
+

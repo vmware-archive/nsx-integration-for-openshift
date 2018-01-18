@@ -1,6 +1,3 @@
-#**************************************************************************
-# Copyright (c) 2017 VMware, Inc. All rights reserved. VMware Confidential.
-#**************************************************************************
 #!/usr/bin/python
 '''
 Created on Jun 8, 2017
@@ -8,13 +5,25 @@ Created on Jun 8, 2017
 '''
 
 import argparse
-import base64
-import httplib
+import atexit
 import json
 import logging
-import ssl
-import sys
+import time
 from urllib import urlencode
+from vmware_nsxlib import v3  # noqa
+from vmware_nsxlib.v3 import config  # noqa
+
+from com.vmware import cis_client
+from com.vmware.vcenter.vm import hardware_client
+from com.vmware import vcenter_client
+import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+from vmware.vapi.lib.connect import get_requests_connector
+from vmware.vapi.security.session import create_session_security_context
+from vmware.vapi.security.user_password import \
+    create_user_password_security_context
+from vmware.vapi.stdlib.client.factories import StubConfigurationFactory
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -36,47 +45,14 @@ class TinyClient(object):
     DEFAULT_VERSION = 'v1'
 
     def __init__(self, args):
-        self.mp_ip = args.mp_ip
-        self.mp_user = args.mp_user
-        self.mp_password = args.mp_password
-        self.port = 443
-        self.mp_cert_file = args.mp_cert_file
-
+        nsxlib_config = config.NsxLibConfig(
+            username=args.mp_user,
+            password=args.mp_password,
+            nsx_api_managers=[args.mp_ip],
+            ca_file=args.mp_cert_file)
+        self.nsxlib = v3.NsxLib(nsxlib_config)
         self.content_type = "application/json"
-        self.accept_type = "application/json"
-        self.response = None
-        self.url_prefix = "/api/" + self.DEFAULT_VERSION
         self.headers = {'content-type': self.content_type}
-        # use basic auth if cert file is not specified
-        if not self.mp_cert_file:
-            auth = base64.urlsafe_b64encode(
-                self.mp_user + ':' + self.mp_password).decode('ascii')
-            self.headers['Authorization'] = 'Basic %s' % auth
-            self._connect_with_pwd()
-        else:
-            self._connect_with_cert()
-
-    def _connect_with_cert(self):
-        ctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-        ctx.load_cert_chain(self.mp_cert_file)
-        self.connection = httplib.HTTPSConnection(self.mp_ip,
-                                                  self.port,
-                                                  timeout=30000,
-                                                  context=ctx)
-
-    def _connect_with_pwd(self):
-        if sys.version_info >= (2, 7, 9):
-            ctx = ssl._create_unverified_context()
-            self.connection = httplib.HTTPSConnection(self.mp_ip,
-                                                      self.port,
-                                                      timeout=30000,
-                                                      context=ctx)
-        else:
-            self.connection = httplib.HTTPSConnection(self.mp_ip, self.port,
-                                                      timeout=30000)
-
-    def close(self):
-        self.connection.close()
 
     def _request(self, method, endpoint, payload="", url_parameters=None):
         """
@@ -93,11 +69,10 @@ class TinyClient(object):
                 url_params_string = "&%s" % urlencode(url_parameters)
             else:
                 url_params_string = "?%s" % urlencode(url_parameters)
-        request = "%s%s%s" % (self.url_prefix, endpoint, url_params_string)
+        request = "%s%s" % (endpoint, url_params_string)
         logger.info('request: %s', request)
-        self.connection.request(method, request, payload, self.headers)
-        self.response = self.connection.getresponse()
-        return self.response
+        return self.nsxlib.client._rest_call(request, method, payload,
+                                             self.headers)
 
     def request(self, method, endpoint, payload="", params=None):
         """
@@ -112,23 +87,8 @@ class TinyClient(object):
             payload = json.dumps(payload)
         logger.info('method: %s, endpoint: %s, payload: %s, params: %s',
                     method, endpoint, payload, params)
-        response = self._request(method, endpoint, payload,
-                                 url_parameters=params)
-        # object not found
-        if method == 'GET' and response.status == 404:
-            return None
-        result_string = response.read()
-
-        logger.info('response: %s', result_string)
-        # DELETE response body is empty
-        py_dict = json.loads(result_string) if result_string else {}
-        logger.info('reponse: %s', py_dict)
-
-        if (response.status < 200 or response.status >= 300 or
-                "error_code" in py_dict):
-            raise Exception(py_dict)
-        else:
-            return py_dict
+        return self._request(method, endpoint, payload,
+                             url_parameters=params)
 
     def create(self, url, py_dict, params=None):
         """
@@ -249,12 +209,6 @@ def getargs():
                         default="",
                         help='CIDR of IpBlock for SNAT')
 
-    parser.add_argument('--mac',
-                        dest="mac_list",
-                        default="",
-                        help='MAC address of kubernetes nodes with the first '
-                             'as master node split by "," no spaces. Format: '
-                             'vm1,vm2,vm3.')
     parser.add_argument('--node',
                         dest="node_list",
                         default="",
@@ -268,6 +222,46 @@ def getargs():
                         default="",
                         help='Name of node logical switch')
 
+    parser.add_argument('--node_lr',
+                        dest="node_lr",
+                        default="",
+                        help='Name of node t1 logical router')
+
+    parser.add_argument('--node_network_cidr',
+                        dest="node_network_cidr",
+                        default="",
+                        help='Subnet to node ls, IP address/mask, '
+                             'ex: 172.20.2.0/16')
+
+    parser.add_argument('--vc_host',
+                        dest='vc_host',
+                        default='',
+                        help='IP address of VC')
+
+    parser.add_argument('--vc_user',
+                        dest='vc_user',
+                        default='',
+                        help='User name of VC')
+
+    parser.add_argument('--vc_password',
+                        dest='vc_password',
+                        default='',
+                        help='Password of VC')
+
+    parser.add_argument('--vms',
+                        dest='vms',
+                        default='',
+                        help='Name of the vms, separated by comma')
+
+    parser.add_argument('--skip_verfication',
+                        dest='skip_verfication',
+                        default=True,
+                        help='If using VC cert, set false')
+
+    parser.add_argument('--cert_path',
+                        dest='cert_path',
+                        default='',
+                        help='Absolute path to VC cert')
     args = parser.parse_args()
     return args
 
@@ -296,6 +290,185 @@ def add_tag(py_dict, tag_dict):
     return py_dict
 
 
+class VMNetworkManager(object):
+    def __init__(self, args):
+        self.host = args.vc_host
+        self.user = args.vc_user
+        self.pwd = args.vc_password
+        self.skip_verfication = args.skip_verfication
+        self.cert_path = args.cert_path
+        self.vms = args.vms
+        self.node_ls_name = args.node_ls
+        self.node_list = args.node_list
+
+    def get_jsonrpc_endpoint_url(self, host):
+        # The URL for the stub requests are made against the /api HTTP
+        # endpoint of the vCenter system.
+        return "https://{}/api".format(host)
+
+    def connect(self, host, user, pwd,
+                skip_verification=False,
+                cert_path=None,
+                suppress_warning=True):
+        """
+        Create an authenticated stub configuration object that can be used
+        to issue requests against vCenter.
+
+        Returns a stub_config that stores the session identifier that can be
+        used to issue authenticated requests against vCenter.
+        """
+        host_url = self.get_jsonrpc_endpoint_url(host)
+
+        session = requests.Session()
+        if skip_verification:
+            session = self.create_unverified_session(session, suppress_warning)
+        elif cert_path:
+            session.verify = cert_path
+        connector = get_requests_connector(session=session, url=host_url)
+        stub_config = StubConfigurationFactory.new_std_configuration(connector)
+
+        return self.login(stub_config, user, pwd)
+
+    def login(self, stub_config, user, pwd):
+        """
+        Create an authenticated session with vCenter.
+        Returns a stub_config that stores the session identifier that can
+        be used to issue authenticated requests against vCenter.
+        """
+        # Pass user credentials (user/password) in the security context to
+        # authenticate.
+        security_context = create_user_password_security_context(user, pwd)
+        stub_config.connector.set_security_context(security_context)
+
+        # Create the stub for the session service
+        # and login by creating a session.
+        session_svc = cis_client.Session(stub_config)
+        session_id = session_svc.create()
+
+        # Store the session identifier in the security
+        # context of the stub and use that for all subsequent remote requests
+        session_security_context = create_session_security_context(session_id)
+        stub_config.connector.set_security_context(session_security_context)
+
+        return stub_config
+
+    def logout(self, stub_config):
+        """
+        Delete session with vCenter.
+        """
+        if stub_config:
+            session_svc = cis_client.Session(stub_config)
+            session_svc.delete()
+
+    def create_unverified_session(self, session, suppress_warning=True):
+        """
+        Create a unverified session to disable the certificate verification.
+        """
+        session.verify = False
+        if suppress_warning:
+            # Suppress unverified https request warnings
+            requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+        return session
+
+    def get_vm(self, stub_config, vm_name):
+        """
+        Return the identifier of a vm
+        """
+        vm_svc = vcenter_client.VM(stub_config)
+        names = set([vm_name])
+        vms = vm_svc.list(vcenter_client.VM.FilterSpec(names=names))
+
+        if len(vms) == 0:
+            logger.info("VM with name ({}) not found".format(vm_name))
+            return None
+
+        vm = vms[0].vm
+        logger.info("Found VM '{}' ({})".format(vm_name, vm))
+        return vm
+
+    def configure_vnic(self):
+        # if user did not set vc host or user or password, do nothing
+        if not self.host or not self.user or not self.pwd:
+            return
+        stub_config = self.connect(self.host, self.user,
+                                   self.pwd, self.skip_verfication)
+        atexit.register(self.logout, stub_config)
+        vm_list = self.vms.split(',')
+        node_list = self.node_list.split(',')
+        for vm_name, node_name in zip(vm_list, node_list):
+            vm = self.get_vm(stub_config, vm_name)
+            if not vm:
+                raise Exception('Existing vm with name ({}) is required. '
+                                'Please create the vm first.'.format(vm_name))
+
+            # After node_ls is created, get the network with the same name
+            network_svc = vcenter_client.Network(stub_config)
+            filter = vcenter_client.Network.FilterSpec(
+                names=set([self.node_ls_name]))
+            network_summaries = network_svc.list(filter=filter)
+            logger.info(network_summaries)
+            if not network_summaries:
+                raise Exception('Network with name %s not found on VC %s' %
+                                (self.node_ls_name, self.host))
+
+            network = network_summaries[0].network
+            ethernet_svc = hardware_client.Ethernet(stub_config)
+            logger.info('\n# List all Ethernet adapters for VM %s' % vm_name)
+            nic_summaries = ethernet_svc.list(vm=vm)
+            logger.info('vm.hardware.Ethernet.list({}) -> {}'
+                        .format(vm, nic_summaries))
+
+            # Get information for each Ethernet on the VM
+            idle_nic = None
+            finished_configuring_current_vm = False
+            for nic_summary in nic_summaries:
+                nic = nic_summary.nic
+                nic_info = ethernet_svc.get(vm=vm, nic=nic)
+                logger.info('vm.hardware.Ethernet.get({}, {}) -> {}'.
+                            format(vm, nic, nic_info))
+                if (nic_info.state == 'CONNECTED'
+                    and nic_info.backing.network == network):
+                    logger.info("Nic for the network has been configured. "
+                                "Finished configuring current VM.")
+                    finished_configuring_current_vm = True
+                    break
+                if nic_info.state == 'NOT_CONNECTED':
+                    idle_nic = nic
+            if finished_configuring_current_vm:
+                continue
+
+            network_type = hardware_client.Ethernet.BackingType.OPAQUE_NETWORK
+            if not idle_nic:
+                logger.info("No available vnic found, creating new vnic.")
+                nic_create_spec = hardware_client.Ethernet.CreateSpec(
+                    start_connected=True,
+                    allow_guest_control=True,
+                    wake_on_lan_enabled=True,
+                    backing=hardware_client.Ethernet.BackingSpec(
+                        type=network_type,
+                        network=network))
+                idle_nic = ethernet_svc.create(vm, nic_create_spec)
+                logger.info("Created new vnic {}.".format(idle_nic))
+
+            else:
+                logger.info("Idle vnic {} found, updating it's network."
+                            .format(idle_nic))
+                nic_update_spec = hardware_client.Ethernet.UpdateSpec(
+                    backing=hardware_client.Ethernet.BackingSpec(
+                        type=network_type,
+                        network=network),
+                    start_connected=True
+                )
+                ethernet_svc.update(vm, idle_nic, nic_update_spec)
+                logger.info("Updated vnic {} with network {}."
+                            .format(idle_nic, network))
+            idle_nic_info = ethernet_svc.get(vm=vm, nic=idle_nic)
+            if idle_nic_info.state == 'NOT_CONNECTED':
+                logger.info("Connecting vnic {} with vm {}"
+                            .format(idle_nic, vm_name))
+                ethernet_svc.connect(vm, idle_nic)
+
+
 class NSXResourceManager(object):
     def __init__(self, api_client):
         self.api_client = api_client
@@ -306,24 +479,46 @@ class NSXResourceManager(object):
             'IpBlock': '/pools/ip-blocks',
             'LogicalSwitch': '/logical-switches',
             'LogicalPort': '/logical-ports',
+            'LogicalRouterPort': '/logical-router-ports',
+            'VIF': '/fabric/vifs',
+            'VM': '/fabric/virtual-machines'
         }
 
-    def get_resource_by_type_and_name(self, resource_type, resource_name):
+        self.secondary_resource_to_url = {
+            'Routing_Advertisement': '/routing/advertisement',
+            'Routing_Redistribution': '/routing/redistribution'
+        }
+
+    def get_resource_by_type_and_name(self, resource_type, resource_name,
+                                      use_search_api=True):
         search_params = {
             'resource_type': resource_type,
             'display_name': resource_name,
         }
-        response = self.api_client.search(search_params)
-        result_count = response.get('result_count', 0)
-        if result_count > 1:
-            raise Exception('More than one resource found for type %s and '
-                            'name %s', resource_type, resource_name)
-        return response['results'][0] if result_count else None
+        if use_search_api:
+            response = self.api_client.search(search_params)
+            result_count = response.get('result_count', 0)
+            if result_count > 1:
+                raise Exception('More than one resource found for type %s and '
+                                'name %s', resource_type, resource_name)
+            return response['results'][0] if result_count else None
+        else:
+            result = self.get_all(resource_type)
+            resources = []
+            for r in result:
+                if search_params and all(r.get(k) == v
+                                         for k, v in search_params.items()):
+                    resources.append(r)
+            if len(resources) > 1:
+                raise Exception('More than one resource found for type %s and '
+                                'name %s', resource_type, resource_name)
+            return resources[0] if resources else None
 
     def get_or_create_resource(self, resource_type, resource_name,
-                               params=None):
+                               params=None, use_search_api=True):
         resource = self.get_resource_by_type_and_name(
-            resource_type, resource_name)
+            resource_type, resource_name,
+            use_search_api=use_search_api)
         if not resource:
             logger.info('Resource of type %s, and name %s not found, creating',
                         resource_type, resource_name)
@@ -355,10 +550,24 @@ class NSXResourceManager(object):
         url = self.resource_to_url[resource['resource_type']]
         self.api_client.update(url, resource['id'], resource)
 
+    def update_secondary_resource(self, resource_type, resource_id,
+                                  secondary_resource_type,
+                                  secondary_resource):
+        url = (self.resource_to_url[resource_type] + '/' + resource_id + '/'
+               + self.secondary_resource_to_url[secondary_resource_type])
+        self.api_client.update(url, "", secondary_resource)
+
+    def get_secondary_resource(self, resource_type, resource_id,
+                               secondary_resource_type):
+        url = (self.resource_to_url[resource_type] + '/' + resource_id + '/'
+               + self.secondary_resource_to_url[secondary_resource_type])
+        return self.api_client.read(url)
+
 
 class ConfigurationManager(object):
     def __init__(self, args, api_client):
         self.resource_manager = NSXResourceManager(api_client)
+        self.vm_network_manager = VMNetworkManager(args)
 
         self.manager_ip = args.mp_ip
         self.username = args.mp_user
@@ -375,16 +584,12 @@ class ConfigurationManager(object):
         self.snat_ipblock_name = args.snat_ipblock_name
         self.snat_ipblock_cidr = args.snat_ipblock_cidr
 
-        self.mac_to_node_name = self._parse_mac_to_node_name(args)
+        self.mac_to_node_name = {}
         self.node_ls_name = args.node_ls
-
-    def _parse_mac_to_node_name(self, args):
-        mac_list = args.mac_list.split(',')
-        node_name_list = args.node_list.split(',')
-        mapping = {}
-        for mac, node_name in zip(mac_list, node_name_list):
-            mapping[mac] = node_name
-        return mapping
+        self.node_lr_name = args.node_lr
+        self.node_network_cidr = args.node_network_cidr
+        self.vm_list = args.vms.split(',')
+        self.node_list = args.node_list.split(',')
 
     def _has_tags(self, resource, required_tags):
         if not required_tags:
@@ -409,7 +614,8 @@ class ConfigurationManager(object):
         return True
 
     def _handle_general_configuration(self, resource_type, resource_name,
-                                      params=None, required_tags=None):
+                                      params=None, required_tags=None,
+                                      use_search_api=True):
         """
         The algorithm for 'general configuration' is: Check if the resource
         with specified type and name exists and only one exists.
@@ -417,10 +623,13 @@ class ConfigurationManager(object):
         If not found, create one.
         Then continue and tag the resource if it doesn't yet have all of the
         required tags.
+        Some resource (like Transport Zone), the payload from search API is
+        not usable by nsx api, we will just use the nsx client api for it
         """
 
         resource = self.resource_manager.get_or_create_resource(
-            resource_type, resource_name, params)
+            resource_type, resource_name, params,
+            use_search_api=use_search_api)
         if not self._has_tags(resource, required_tags):
             resource = add_tag(resource, required_tags)
             self.resource_manager.update_resource(resource)
@@ -432,7 +641,8 @@ class ConfigurationManager(object):
         }
         required_tags = {NCP_CLUSTER_KEY: self.cluster_name}
         self._handle_general_configuration(
-            'TransportZone', self.transport_zone_name, params, required_tags)
+            'TransportZone', self.transport_zone_name, params, required_tags,
+            use_search_api=False)
 
     def handle_t0_router(self):
         edge_cluster = self.resource_manager.get_resource_by_type_and_name(
@@ -450,7 +660,16 @@ class ConfigurationManager(object):
         }
         required_tags = {NCP_CLUSTER_KEY: self.cluster_name}
         self._handle_general_configuration(
-            'LogicalRouter', self.t0_router_name, params, required_tags)
+            'LogicalRouter', self.t0_router_name, params, required_tags,
+            use_search_api=False)
+        t0 = self.resource_manager.get_resource_by_type_and_name(
+            'LogicalRouter', self.t0_router_name, use_search_api=False)
+        redistribution = self.resource_manager.get_secondary_resource(
+            'LogicalRouter', t0['id'], 'Routing_Redistribution')
+        redistribution['bgp_enabled'] = True
+        self.resource_manager.update_secondary_resource(
+            'LogicalRouter', t0['id'],
+            'Routing_Redistribution', redistribution)
 
     def _handle_ipblock(self, ipblock_name, ipblock_cidr, required_tags):
         # handle ipblock configuration for a specific block name
@@ -467,63 +686,170 @@ class ConfigurationManager(object):
         self._handle_ipblock(self.snat_ipblock_name, self.snat_ipblock_cidr, {
             NCP_EXTERNAL_KEY: 'true'})
 
+    def handle_t1_router(self):
+        # Get node_lr. Create it if not present
+        # After creation, connect it to T0 and node-ls
+        node_lr_name = self.node_lr_name
+        node_lr = self.resource_manager.get_resource_by_type_and_name(
+            'LogicalRouter', node_lr_name)
+        # we first check if node_lr has been configured or not
+        if not node_lr:
+            t0_router = self.resource_manager.get_resource_by_type_and_name(
+                'LogicalRouter', self.t0_router_name)
+            if not t0_router:
+                logger.critical('No T0 router with name %s found. '
+                                'Configuration of T1 %s router is aborted.' %
+                                (self.t0_router_name, node_lr_name))
+                return
+
+            params = {
+                'router_type': 'TIER1',
+                'high_availability_mode': 'ACTIVE_STANDBY',
+            }
+            node_lr = self.resource_manager.get_or_create_resource(
+                'LogicalRouter', self.node_lr_name, params)
+
+            # Then we add router link port on t0 and t1
+            t1_id = node_lr['id']
+            t0_id = t0_router['id']
+            t0_router_port_name = "Link_to_%s" % node_lr_name
+            params1 = {
+                'display_name': t0_router_port_name,
+                'resource_type': 'LogicalRouterLinkPortOnTIER0',
+                'logical_router_id': t0_id,
+                'tags': []
+            }
+            t0_router_port = self.resource_manager.get_or_create_resource(
+                'LogicalRouterPort', t0_router_port_name, params1)
+            t1_router_port_name = "Link_to_%s" % t0_router['display_name']
+            params2 = {
+                'display_name': t1_router_port_name,
+                'resource_type': 'LogicalRouterLinkPortOnTIER1',
+                'logical_router_id': t1_id,
+                'tags': [],
+                'linked_logical_router_port_id': {
+                    'target_id': t0_router_port['id']}
+            }
+            self.resource_manager.get_or_create_resource(
+                'LogicalRouterPort', t1_router_port_name, params2)
+
+            t1_router_switch_port_name = "Link_to_%s" % self.node_ls_name
+            node_ls_port = self.resource_manager.get_resource_by_type_and_name(
+                'LogicalPort', 'To_%s' % self.node_lr_name)
+            ip = self.node_network_cidr.split('/')[0]
+            cidr_len = self.node_network_cidr.split('/')[1]
+            params3 = {
+                'display_name': t1_router_switch_port_name,
+                'resource_type': 'LogicalRouterDownLinkPort',
+                'logical_router_id': t1_id,
+                'tags': [],
+                'linked_logical_switch_port_id': {
+                    'target_id': node_ls_port['id']},
+                'subnets': [{
+                    'ip_addresses': [ip],
+                    'prefix_length': cidr_len
+                }]
+            }
+            self.resource_manager.get_or_create_resource(
+                'LogicalRouterPort', t1_router_switch_port_name, params3)
+
+        # Finally we enale node_lr for route advertisement
+        advertisement = self.resource_manager.get_secondary_resource(
+            'LogicalRouter', node_lr['id'], 'Routing_Advertisement')
+        advertisement['enabled'] = True
+        advertisement['advertise_nsx_connected_routes'] = True
+        advertisement['advertise_lb_vip'] = True
+        advertisement['advertise_static_routes'] = True
+        advertisement['advertise_nat_routes'] = True
+        advertisement['advertise_lb_snat_ip'] = True
+        self.resource_manager.update_secondary_resource(
+            'LogicalRouter', node_lr['id'],
+            'Routing_Advertisement', advertisement)
+
     def handle_vif(self):
         # get node-ls. Create it if it doesn't exist yet
         transport_zone = self.resource_manager.get_resource_by_type_and_name(
             'TransportZone', self.transport_zone_name)
 
-        params = {
+        params_1 = {
             'transport_zone_id': transport_zone['id'],
             'admin_state': 'UP',
             'replication_mode': 'MTEP',
         }
         node_ls = self.resource_manager.get_or_create_resource(
-            'LogicalSwitch', self.node_ls_name, params)
+            'LogicalSwitch', self.node_ls_name, params_1)
+
+        # create logical ports to node_lr
+        logical_port_to_node_ls = 'To_%s' % self.node_lr_name
+        params_2 = {
+            'logical_switch_id': node_ls['id'],
+            'display_name': logical_port_to_node_ls,
+            'admin_state': 'UP',
+            'attachment': None,
+            'tags': [],
+            'address_bindings': None
+        }
+        self.resource_manager.get_or_create_resource(
+            'LogicalPort', logical_port_to_node_ls, params_2)
 
         logger.info('node_ls: %s', node_ls)
 
-        logical_ports = self.resource_manager.get_all(
-            'LogicalPort', {'logical_switch_id': node_ls['id']})
+        # After node ls is created, configure vnic if user provided
+        # Sleep 20 seconds for vc to discover node ls
+        time.sleep(20)
+        self.vm_network_manager.configure_vnic()
+        # Sleep 10 senconds for nsx to discover vif connected to node_ls
+        time.sleep(10)
+        vms_id = {}
+        id_port = {}
+        for vm_name in self.vm_list:
+            params = {"display_name": vm_name}
+            vm_info = self.resource_manager.get_all('VM', params=params)
+            if not vm_info:
+                logger.warning("Cannot find the VM %s" % vm_name)
+            else:
+                vms_id[vm_name] = vm_info[0]['external_id']
 
-        for port in logical_ports:
-            port_id = port['id']
-
-            mac_table = []
-            try:
-                mac_table = self.resource_manager.get_mac_table_for_lp(port_id)
-            except Exception:
-                logger.warning('Unable to obtain mac_table for logical port '
-                               '%s with id %s', port['display_name'],
-                               port['id'])
-
-            matched_mac = None
-            for mac_entry in mac_table:
-                mac = mac_entry['mac_address']
-                if mac and mac in self.mac_to_node_name:
-                    matched_mac = mac
-                    break
-
-            if not mac_table or not matched_mac:
-                logger.info('Logical port %s does not have a matched mac',
-                            port['display_name'])
+        for vmid in vms_id.values():
+            if not vmid:
                 continue
+            params = {"owner_vm_id": vmid}
+            vm_infos = self.resource_manager.get_all('VIF', params=params)
+            for vm_info in vm_infos:
+                if 'lport_attachment_id' in vm_info:
+                    # In KVM, the vm managerment also has
+                    # lport_attachement_id, but there is no lsp for it.
+                    att_id = vm_info["lport_attachment_id"]
+                    lsp_info = self.resource_manager.get_all(
+                        'LogicalPort', params={"attachment_id": att_id})
+                    if not lsp_info:
+                        continue
+                    else:
+                        lsp = lsp_info[0]
+                        id_port[vmid] = lsp
 
-            node_name = self.mac_to_node_name[matched_mac]
-            # tag it with the node name
-            required_tags = {
-                NCP_CLUSTER_KEY: self.cluster_name,
-                NCP_NODE_KEY: node_name
-            }
-            logger.info('required tags: %s, port: %s', required_tags, port)
-            if not self._has_tags(port, required_tags):
-                port = add_tag(port, required_tags)
-                self.resource_manager.update_resource(port)
+        for (vm_name, node_name) in zip(self.vm_list, self.node_list):
+            lsp = id_port.get(vms_id[vm_name])
+            if not lsp:
+                logger.warning("Cannot find any VIF on the VM %s" % vm_name)
+            else:
+                required_tags = {
+                    NCP_CLUSTER_KEY: self.cluster_name,
+                    NCP_NODE_KEY: node_name
+                }
+                logger.info('required tags: %s, port: %s', required_tags, lsp)
+                if not self._has_tags(lsp, required_tags):
+                    lsp = add_tag(lsp, required_tags)
+                    self.resource_manager.update_resource(lsp)
+                logger.info("The logical port for the VM %s has been tagged "
+                            "with k8s cluster and node name.", vm_name)
 
     def configure_all(self):
         self.handle_transport_zone()
         self.handle_t0_router()
         self.handle_ipblocks()
         self.handle_vif()
+        self.handle_t1_router()
 
 
 def main():
@@ -531,7 +857,6 @@ def main():
     api_client = TinyClient(cmd_line_args)
     config_manager = ConfigurationManager(cmd_line_args, api_client)
     config_manager.configure_all()
-    api_client.close()
 
 
 if __name__ == '__main__':
