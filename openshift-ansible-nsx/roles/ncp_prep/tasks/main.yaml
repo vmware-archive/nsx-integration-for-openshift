@@ -68,3 +68,27 @@
 
 - name: Bring up node-if
   command: "ip link set {{ uplink_port }} up"
+
+## Get NCP tar file and make it docker image
+- name: Download ncp image tar file
+  get_url:
+    url: "{{ ncp_image_url }}"
+    dest: /tmp/nsx_ncp_rhel.tar
+    force: no
+
+# Using docker_image to load tar file to docker image
+- name: Load image from the image tar file
+  docker_image:
+    name: nsx_ncp_rhel
+    timeout: 300
+    state: present
+    load_path: /tmp/nsx_ncp_rhel.tar
+
+- name: Register the docker image name
+  shell: docker images | grep nsx-ncp-rhel
+  register: nsx_ncp_rhel
+  state: present
+
+- name: Tag image as nsx-ncp
+  shell: docker tag "{{ nsx_ncp_rhel.stdout.split()[0] }}" nsx-ncp
+  state: present

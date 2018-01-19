@@ -1,4 +1,5 @@
 ---
+vmware_nsxlib_uri: git.openstack.org/openstack/vmware-nsxlib#egg=vmware_nsxlib
 perform_nsx_config: True
 nsx_config_script_path: <nsx_config_script_path>
 nsx_cert_file_path: <nsx_cert_file_path>
@@ -10,7 +11,12 @@ pod_ipblock_name: <pod_ip_block_name>
 pod_ipblock_cidr: <pod_ip_block_cidr>
 snat_ipblock_name: <snat_ip_block_name>
 snat_ipblock_cidr: <snat_ip_block_cidr>
-vnic_mac_list: <vnic_mac_list>
 os_node_name_list: <os_node_name_list>
 nsx_node_ls_name: <nsx_node_ls_name>
 os_cluster_name: <os_cluster_name>
+nsx_node_lr_name: <nsx_node_lr_name>
+node_network_cidr: <node_network_cidr>
+vc_host: <vc_host>
+vc_user: <vc_user>
+vc_password: <vc_password>
+vms: <vms>
