@@ -1,22 +1,20 @@
 ---
-- name: Download vmware-nsxlib
-  git:
-      repo: "https://{{ vmware_nsxlib_uri }}"
-      dest: /tmp/vmware-nsxlib
-      version: 11.1.3
-      update: no
+- name: Install python-devel
+  yum:
+    name: python-devel
+    state: latest
 
 - name: Install vmware-nsxlib
   pip:
-    name: file:///tmp/vmware-nsxlib
-    editable: true
+    name: vmware-nsxlib
+    version: 11.1.4
     state: present
 
 - name: Download VSphere Automation SDK
   git:
       repo: "https://github.com/vmware/vsphere-automation-sdk-python"
       dest: /tmp/vsphere-automation-sdk-python/
-      version: 6.6.1
+      version: v6.6.1
       update: no
 
 - name: Install VSphere Automation SDK
@@ -31,5 +29,5 @@
       version: 16.2.0
 
 - name: NSX management plane resource configuration
-  command: "python {{ nsx_config_script_path }} --cert {{ nsx_cert_file_path }} --mp {{ nsx_manager_ip }} --k8scluster {{ os_cluster_name }} --edge_cluster {{ nsx_edge_cluster_name }} --tz {{ nsx_transport_zone_name }} --t0 {{ nsx_t0_router_name }} --pod_ipblock_name {{ pod_ipblock_name }} --pod_ipblock_cidr {{ pod_ipblock_cidr }} --snat_ipblock_name {{ snat_ipblock_name }} --snat_ipblock_cidr {{ snat_ipblock_cidr }} --node {{ os_node_name_list }} --node_ls {{ nsx_node_ls_name }} --node_lr {{ nsx_node_lr_name }} --node_network_cidr {{ node_network_cidr }} ----vc_host {{ vc_host }} --vc_user {{ vc_user }} --vc_password {{ vc_password }} --vms {{ vms }}"
+  command: "python {{ nsx_config_script_path }} --cert {{ nsx_cert_file_path }} --mp {{ nsx_manager_ip }} --k8scluster {{ os_cluster_name }} --edge_cluster {{ nsx_edge_cluster_name }} --tz {{ nsx_transport_zone_name }} --t0 {{ nsx_t0_router_name }} --pod_ipblock_name {{ pod_ipblock_name }} --pod_ipblock_cidr {{ pod_ipblock_cidr }} --snat_ipblock_name {{ snat_ipblock_name }} --snat_ipblock_cidr {{ snat_ipblock_cidr }} --node {{ os_node_name_list }} --node_ls {{ nsx_node_ls_name }} --node_lr {{ nsx_node_lr_name }} --node_network_cidr {{ node_network_cidr }} --vc_host {{ vc_host }} --vc_user {{ vc_user }} --vc_password {{ vc_password }} --vms {{ vms }}"
   when: perform_nsx_config == True
