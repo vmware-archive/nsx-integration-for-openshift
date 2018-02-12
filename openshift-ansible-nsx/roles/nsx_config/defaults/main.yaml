@@ -1,5 +1,4 @@
 ---
-vmware_nsxlib_uri: git.openstack.org/openstack/vmware-nsxlib#egg=vmware_nsxlib
 perform_nsx_config: True
 nsx_config_script_path: <nsx_config_script_path>
 nsx_cert_file_path: <nsx_cert_file_path>
