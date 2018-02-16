@@ -137,7 +137,7 @@
     path: /tmp/ncp-rc.yml
     regexp: "^    nsx_api_password"
     insertafter: "^ *nsx_api_managers"
-    line: "    nsx_api_password = {{ nsx_api_password }}"
+    line: "    nsx_api_password = {{ nsx_api_password | replace('$', '$$') }}"
   when: use_cert != true
 
 - name: Set NSX API username
@@ -180,7 +180,7 @@
       regexp: "^    volumeMounts"
       insertafter: "^ *volumeMounts:"
       line: "          - name: nsx-priv-key\n            mountPath: /etc/nsx-ujo/nsx_priv_key"
-  when: checkpriv.rc != 0
+  when: checkpriv.rc != 0 and use_cert == true
 
 - name: Greet the world if /tmp/ncp-rc.yml contains "nsx-priv-key"
   lineinfile:
@@ -188,7 +188,7 @@
       regexp: "^    volumes"
       insertafter: "^ *volumes:"
       line: "        - name: nsx-priv-key\n          hostPath:\n            path: {{ nsx_api_private_key_file }}"
-  when: checkpriv.rc != 0
+  when: checkpriv.rc != 0 and use_cert == true
 
 - name: Check whether /tmp/ncp-rc.yml contains "nsx-cert"
   command: grep "nsx-cert" /tmp/ncp-rc.yml
@@ -248,6 +248,8 @@
   command: oc apply -f /tmp/nsx-node-agent-ds.yml
 
 # After ncp starts, start Openshift Registry and Router service
+- name: Grant router service account access
+  command: oc adm policy add-scc-to-user hostnetwork -z router
 - name: Start Openshift Router service
   command: oadm router router --service-account=router
 
@@ -257,5 +259,8 @@
 # clusterrole "registry-registry-role" already exists
 # this should just be a warning as you'd get in adding router.
 # You can ignore this as the registry will be created successfully anyway
+- name: Grant Registry service access
+  command: oc adm policy add-scc-to-user hostnetwork -z registry
 - name: Start Openshift Registry service
   command: oadm registry --service-account=registry
+
