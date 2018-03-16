@@ -30,21 +30,6 @@
 - name: Apply ncp-rbac
   command: oc apply -f /tmp/ncp-rbac.yml
 
-- name: Download nsx-node-agent-rbac
-  get_url:
-    url: "{{ nsx_node_agent_rbac_yaml_url }}"
-    dest: /tmp/nsx-node-agent-rbac.yml
-    force: yes
-
-- name: Change API version for nsx-node-agent-rbac
-  replace:
-    path: /tmp/nsx-node-agent-rbac.yml
-    regexp: "^apiVersion: rbac.authorization.k8s.io/v1beta1"
-    replace: "apiVersion: v1"
-
-- name: Apply nsx-node-agent-rbac
-  command: oc apply -f /tmp/nsx-node-agent-rbac.yml
-
 - name: check if /etc/nsx-ujo dir exists
   stat:
     path: /etc/nsx-ujo
