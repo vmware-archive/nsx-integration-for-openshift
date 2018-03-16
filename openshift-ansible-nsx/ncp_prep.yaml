@@ -1,9 +1,10 @@
 # to run: ansible-playbook -i /PATH/TO/HOSTS/hosts ncp_prep.yaml
 ---
 # run the ncp_prep role on each node of the cluster
-- hosts: OSEv3
-  roles:
-    - ncp_prep
 - hosts: single_master
   roles:
     - nsx_config
+
+- hosts: OSEv3
+  roles:
+    - ncp_prep
