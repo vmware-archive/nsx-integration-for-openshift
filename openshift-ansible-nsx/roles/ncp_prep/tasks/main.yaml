@@ -87,8 +87,6 @@
 - name: Register the docker image name
   shell: docker images | grep nsx-ncp-rhel
   register: nsx_ncp_rhel
-  state: present
 
 - name: Tag image as nsx-ncp
   shell: docker tag "{{ nsx_ncp_rhel.stdout.split()[0] }}" nsx-ncp
-  state: present
