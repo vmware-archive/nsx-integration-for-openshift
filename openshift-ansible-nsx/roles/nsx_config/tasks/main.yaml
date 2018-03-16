@@ -1,4 +1,8 @@
 ---
+- name: Install docker-py
+  pip:
+    name: docker-py
+
 - name: Install python-devel
   yum:
     name: python-devel
