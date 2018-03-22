@@ -200,14 +200,24 @@ def getargs():
                         default='',
                         help='CIDR of IpBlock for pod traffic')
 
-    parser.add_argument('--snat_ipblock_name',
-                        dest="snat_ipblock_name",
+    parser.add_argument('--snat_ippool_name',
+                        dest="snat_ippool_name",
                         default='',
-                        help='name of IpBlock for SNAT')
-    parser.add_argument('--snat_ipblock_cidr',
-                        dest="snat_ipblock_cidr",
+                        help='name of IpPool for SNAT')
+    parser.add_argument('--snat_ippool_cidr',
+                        dest="snat_ippool_cidr",
                         default="",
-                        help='CIDR of IpBlock for SNAT')
+                        help='CIDR of IpPool for SNAT')
+
+    parser.add_argument('--start_range',
+                        dest="start_range",
+                        default="",
+                        help='Start ip of IpPool for SNAT')
+
+    parser.add_argument('--end_range',
+                        dest="end_range",
+                        default="",
+                        help='End ip of IpPool for SNAT')
 
     parser.add_argument('--node',
                         dest="node_list",
@@ -477,6 +487,7 @@ class NSXResourceManager(object):
             'TransportZone': '/transport-zones',
             'LogicalRouter': '/logical-routers',
             'IpBlock': '/pools/ip-blocks',
+            'IpPool': '/pools/ip-pools',
             'LogicalSwitch': '/logical-switches',
             'LogicalPort': '/logical-ports',
             'LogicalRouterPort': '/logical-router-ports',
@@ -581,8 +592,10 @@ class ConfigurationManager(object):
 
         self.pod_ipblock_name = args.pod_ipblock_name
         self.pod_ipblock_cidr = args.pod_ipblock_cidr
-        self.snat_ipblock_name = args.snat_ipblock_name
-        self.snat_ipblock_cidr = args.snat_ipblock_cidr
+        self.snat_ippool_name = args.snat_ippool_name
+        self.snat_ippool_cidr = args.snat_ippool_cidr
+        self.start_range = args.start_range
+        self.end_range = args.end_range
 
         self.mac_to_node_name = {}
         self.node_ls_name = args.node_ls
@@ -677,14 +690,32 @@ class ConfigurationManager(object):
         self._handle_general_configuration(
             'IpBlock', ipblock_name, params, required_tags)
 
+    def _handle_ippool(self, ippool_name, ippool_cidr,
+                       start_range, end_range, required_tags):
+        # handle ipblock configuration for a specific block name
+        params = {"subnets": [
+            {
+                "allocation_ranges": [
+                    {
+                        "start": start_range,
+                        "end": end_range
+                    }
+                ],
+                "cidr": ippool_cidr}]
+        }
+        self._handle_general_configuration(
+            'IpPool', ippool_name, params, required_tags)
+
     def handle_ipblocks(self):
         # IP block for pod traffic
         self._handle_ipblock(self.pod_ipblock_name, self.pod_ipblock_cidr, {
             NCP_CLUSTER_KEY: self.cluster_name})
 
         # IP block for SNAT
-        self._handle_ipblock(self.snat_ipblock_name, self.snat_ipblock_cidr, {
-            NCP_EXTERNAL_KEY: 'true'})
+        self._handle_ippool(self.snat_ippool_name, self.snat_ippool_cidr,
+                            self.start_range, self.end_range,
+                            {NCP_EXTERNAL_KEY: 'true',
+                             NCP_CLUSTER_KEY: self.cluster_name})
 
     def handle_t1_router(self):
         # Get node_lr. Create it if not present
@@ -861,3 +892,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
