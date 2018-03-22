@@ -229,6 +229,9 @@
     regexp: "^ *#?apiserver_host_port =.*"
     line: "    apiserver_host_port = 8443"
 
+- name: Override default node selector
+  command: oc patch namespace nsx-system -p '{"metadata":{"annotations":{"openshift.io/node-selector":""}}}'
+
 - name: Start nsx-node-agent DaemonSet
   command: oc apply -f /tmp/nsx-node-agent-ds.yml
 
