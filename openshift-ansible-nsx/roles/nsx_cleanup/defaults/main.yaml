@@ -1,0 +1,11 @@
+---
+nsx_cleanup_script_path: <nsx_config_script_path>
+cluster_name: <cluster_name>
+nsx_manager_ip: <manager_ip>
+# If use_cert is set to true, you can skip setting nsx user and password
+nsx_api_user: <nsx_api_user>
+nsx_api_password: <nsx_api_password>
+use_cert: false
+# Uncomment and set correct path for the following two lines if use_cert is set to true
+# nsx_api_cert_file: <nsx_api_cert_path>
+# nsx_api_private_key_file: <nsx_api_priv_path>

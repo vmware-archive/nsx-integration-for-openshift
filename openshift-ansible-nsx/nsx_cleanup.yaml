@@ -1,0 +1,6 @@
+# to run: ansible-playbook -i /PATH/TO/HOSTS/hosts nsx_cleanup.yaml
+---
+# run the nsx_cleanup role on master
+- hosts: single_master
+  roles:
+    - nsx_cleanup
