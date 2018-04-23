@@ -7,6 +7,7 @@
 - name: Install vmware-nsxlib
   pip:
     name: vmware-nsxlib
+    version: 11.1.4
     state: present
 
 - name: Download VSphere Automation SDK
