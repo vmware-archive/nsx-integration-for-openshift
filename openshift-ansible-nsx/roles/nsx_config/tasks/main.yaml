@@ -27,6 +27,11 @@
       name: pyOpenSSL
       version: 16.2.0
 
-- name: NSX management plane resource configuration
-  command: "python {{ nsx_config_script_path }} --cert {{ nsx_cert_file_path }} --mp {{ nsx_manager_ip }} --k8scluster {{ os_cluster_name }} --edge_cluster {{ nsx_edge_cluster_name }} --tz {{ nsx_transport_zone_name }} --t0 {{ nsx_t0_router_name }} --pod_ipblock_name {{ pod_ipblock_name }} --pod_ipblock_cidr {{ pod_ipblock_cidr }} --snat_ippool_name {{ snat_ippool_name }} --snat_ippool_cidr {{ snat_ippool_cidr }} --start_range {{ start_range }} --end_range {{ end_range }} --node {{ os_node_name_list }} --node_ls {{ nsx_node_ls_name }} --node_lr {{ nsx_node_lr_name }} --node_network_cidr {{ node_network_cidr }} --vc_host {{ vc_host }} --vc_user {{ vc_user }} --vc_password {{ vc_password }} --vms {{ vms }}"
-  when: perform_nsx_config == True
+- name: NSX management plane resource configuration with cert
+  command: "python {{ nsx_config_script_path }} --cert {{ nsx_cert_file_path }} --mp {{ nsx_manager_ip }} --k8scluster {{ os_cluster_name }} --edge_cluster {{ nsx_edge_cluster_name }} --tz {{ nsx_transport_zone_name }} --t0 {{ nsx_t0_router_name }} --pod_ipblock_name {{ pod_ipblock_name }} --pod_ipblock_cidr {{ pod_ipblock_cidr }} --snat_ipblock_name {{ snat_ipblock_name }} --snat_ipblock_cidr {{ snat_ipblock_cidr }} --node {{ os_node_name_list }} --node_ls {{ nsx_node_ls_name }} --node_lr {{ nsx_node_lr_name }} --node_network_cidr {{ node_network_cidr }} --vc_host {{ vc_host }} --vc_user {{ vc_user }} --vc_password {{ vc_password }} --vms {{ vms }}"
+  when: perform_nsx_config == True and use_cert == True
+
+- name: NSX management plane resource configuration with user name
+  command: "python {{ nsx_config_script_path }} --user {{ nsx_api_user }} --password {{ nsx_api_password }} --mp {{ nsx_manager_ip }} --k8scluster {{ os_cluster_name }} --edge_cluster {{ nsx_edge_cluster_name }} --tz {{ nsx_transport_zone_name }} --t0 {{ nsx_t0_router_name }} --pod_ipblock_name {{ pod_ipblock_name }} --pod_ipblock_cidr {{ pod_ipblock_cidr }} --snat_ipblock_name {{ snat_ipblock_name }} --snat_ipblock_cidr {{ snat_ipblock_cidr }} --node {{ os_node_name_list }} --node_ls {{ nsx_node_ls_name }} --node_lr {{ nsx_node_lr_name }} --node_network_cidr {{ node_network_cidr }} --vc_host {{ vc_host }} --vc_user {{ vc_user }} --vc_password {{ vc_password }} --vms {{ vms }}"
+  when: perform_nsx_config == True and use_cert == False
+
