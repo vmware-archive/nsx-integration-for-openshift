@@ -4,10 +4,10 @@
 This repository contains Ansible playbooks for installing NSX-t Container Plugin for OpenShift. 
 
 ## Version
-The playbooks are compatible with NSX-t Container Plugin 2.0 and OpenShift Container Platform 3.5 and 3.6.
+The playbooks are compatible with NSX-t Container Plugin 2.1.x and OpenShift Container Platform 3.7 and 3.9.
 
 ## Documentation
-See the [official guide](https://docs.vmware.com/en/VMware-NSX-T/2.0/nsxt_20_ncp_openshift.pdf).
+See the [official guide](https://docs.vmware.com/en/VMware-NSX-T/2.1/nsxt_21_ncp_openshift.pdf).
 
 ## Contributing
 The nsx-integration-for-openshift project team welcomes contributions from the community. If you wish to contribute code and you have not
