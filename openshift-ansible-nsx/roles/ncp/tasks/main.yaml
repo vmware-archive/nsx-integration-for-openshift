@@ -27,6 +27,12 @@
     regexp: "^apiVersion: rbac.authorization.k8s.io/v1.*"
     replace: "apiVersion: v1"
 
+- name: Enable Route resource API access
+  replace:
+    path: /tmp/ncp-rbac.yml
+    regexp: "# - routes"
+    replace: "- routes"
+
 - name: Apply ncp-rbac
   command: oc apply -f /tmp/ncp-rbac.yml
 
