@@ -81,10 +81,10 @@
   command: oc apply -f /tmp/ncp-os-scc.yml
 
 - name: Add nsx-node-agent-svc-account to ncp-scc
-  command: oadm policy add-scc-to-user ncp-scc -z ncp-svc-account
+  command: oc adm policy add-scc-to-user ncp-scc -z ncp-svc-account
 
 - name: Add nsx-node-agent-svc-account to ncp-scc
-  command: oadm policy add-scc-to-user ncp-scc -z nsx-node-agent-svc-account
+  command: oc adm policy add-scc-to-user ncp-scc -z nsx-node-agent-svc-account
 
 ### Obtain YAML files to run NCP and nsx-node-agent
 - name: Download NCP yaml
@@ -242,10 +242,17 @@
   command: oc apply -f /tmp/nsx-node-agent-ds.yml
 
 # After ncp starts, start Openshift Registry and Router service
+- name: Switch to default project
+  command: oc project default
+
 - name: Grant router service account access
   command: oc adm policy add-scc-to-user hostnetwork -z router
+
+- name: Grant cluster view permission
+  command: oc adm policy add-cluster-role-to-user cluster-reader system:serviceaccount:default:router
+
 - name: Start Openshift Router service
-  command: oadm router router --service-account=router
+  command: oc adm router router --service-account=router
 
 # In OS 3.7, if you have "registry" service account or "registry-registry-role"
 # created, it will "fail" with "error" as below:
@@ -255,6 +262,7 @@
 # You can ignore this as the registry will be created successfully anyway
 - name: Grant Registry service access
   command: oc adm policy add-scc-to-user hostnetwork -z registry
+
 - name: Start Openshift Registry service
-  command: oadm registry --service-account=registry
+  command: oc adm registry --service-account=registry
 
