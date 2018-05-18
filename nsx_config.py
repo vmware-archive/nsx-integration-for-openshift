@@ -8,6 +8,7 @@ import argparse
 import atexit
 import json
 import logging
+import sys
 import time
 from urllib import urlencode
 from vmware_nsxlib import v3  # noqa
@@ -436,8 +437,8 @@ class VMNetworkManager(object):
                 nic_info = ethernet_svc.get(vm=vm, nic=nic)
                 logger.info('vm.hardware.Ethernet.get({}, {}) -> {}'.
                             format(vm, nic, nic_info))
-                if (nic_info.state == 'CONNECTED'
-                    and nic_info.backing.network == network):
+                if (nic_info.state == 'CONNECTED' and
+                    nic_info.backing.network == network):
                     logger.info("Nic for the network has been configured. "
                                 "Finished configuring current VM.")
                     finished_configuring_current_vm = True
@@ -564,14 +565,14 @@ class NSXResourceManager(object):
     def update_secondary_resource(self, resource_type, resource_id,
                                   secondary_resource_type,
                                   secondary_resource):
-        url = (self.resource_to_url[resource_type] + '/' + resource_id + '/'
-               + self.secondary_resource_to_url[secondary_resource_type])
+        url = (self.resource_to_url[resource_type] + '/' + resource_id + '/' +
+               self.secondary_resource_to_url[secondary_resource_type])
         self.api_client.update(url, "", secondary_resource)
 
     def get_secondary_resource(self, resource_type, resource_id,
                                secondary_resource_type):
-        url = (self.resource_to_url[resource_type] + '/' + resource_id + '/'
-               + self.secondary_resource_to_url[secondary_resource_type])
+        url = (self.resource_to_url[resource_type] + '/' + resource_id + '/' +
+               self.secondary_resource_to_url[secondary_resource_type])
         return self.api_client.read(url)
 
 
@@ -643,9 +644,7 @@ class ConfigurationManager(object):
         resource = self.resource_manager.get_or_create_resource(
             resource_type, resource_name, params,
             use_search_api=use_search_api)
-        if not self._has_tags(resource, required_tags):
-            resource = add_tag(resource, required_tags)
-            self.resource_manager.update_resource(resource)
+        return resource
 
     def handle_transport_zone(self):
         params = {
@@ -653,9 +652,10 @@ class ConfigurationManager(object):
             'transport_type': 'OVERLAY',
         }
         required_tags = {NCP_CLUSTER_KEY: self.cluster_name}
-        self._handle_general_configuration(
+        overlay_tz = self._handle_general_configuration(
             'TransportZone', self.transport_zone_name, params, required_tags,
             use_search_api=False)
+        sys.stdout.write("overlay_tz: %s " % overlay_tz['id'])
 
     def handle_t0_router(self):
         edge_cluster = self.resource_manager.get_resource_by_type_and_name(
@@ -683,12 +683,14 @@ class ConfigurationManager(object):
         self.resource_manager.update_secondary_resource(
             'LogicalRouter', t0['id'],
             'Routing_Redistribution', redistribution)
+        sys.stdout.write("t0_router: %s " % t0['id'])        
 
     def _handle_ipblock(self, ipblock_name, ipblock_cidr, required_tags):
         # handle ipblock configuration for a specific block name
         params = {'cidr': ipblock_cidr}
-        self._handle_general_configuration(
+        ipblock = self._handle_general_configuration(
             'IpBlock', ipblock_name, params, required_tags)
+        sys.stdout.write("container_ip_block: %s " % ipblock['id'])
 
     def _handle_ippool(self, ippool_name, ippool_cidr,
                        start_range, end_range, required_tags):
@@ -703,8 +705,9 @@ class ConfigurationManager(object):
                 ],
                 "cidr": ippool_cidr}]
         }
-        self._handle_general_configuration(
+        ippool = self._handle_general_configuration(
             'IpPool', ippool_name, params, required_tags)
+        sys.stdout.write("external_ip_pool: %s " % ippool['id'])
 
     def handle_ipblocks(self):
         # IP block for pod traffic
