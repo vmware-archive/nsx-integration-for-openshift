@@ -1,0 +1,26 @@
+---
+- name: Get Openshift playbook from repo
+  git:
+      repo: "https://github.com/openshift/openshift-ansible.git"
+      dest: /tmp/openshift-ansible
+      version: release-3.9
+  when: perform_openshift_installation == True
+
+- name: print
+  command: "echo {{ inventory_dir }}"
+  register: ha
+
+- name: aa
+  debug:
+    msg: "{{ ha.stdout }}"
+#- name: Run Openshift installation prerequisit
+#  command: "ansible-playbook -i {{ host_path }} /tmp/openshift-ansible/playbooks/prerequisites.yml"
+#  when: perform_openshift_installation == True
+
+#- name: Run Openshift installation
+#  command: "ansible-playbook -i {{ host_path }} /tmp/openshift-ansible/playbooks/deploy_cluster.yml"
+#  when: perform_openshift_installation == True
+
+- name: Restart Openshift node service
+  command: "systemctl restart atomic-openshift-master-api atomic-openshift-master-controllers"
+  when: perform_openshift_installation == False

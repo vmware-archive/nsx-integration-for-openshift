@@ -1,6 +1,5 @@
 ---
 perform_nsx_config: True
-nsx_config_script_path: <nsx_config_script_path>
 # If use_cert is set to true, you can skip setting nsx user and password
 nsx_api_user: <nsx_user_name>
 nsx_api_password: <nsx_password>
@@ -10,19 +9,20 @@ use_cert: false
 nsx_manager_ip: <ip>
 nsx_edge_cluster_name: <nsx_edge_cluster_name>
 nsx_transport_zone_name: <nsx_transport_zone_name>
-nsx_t0_router_name: <nsx_t0_router_name>
-pod_ipblock_name: <pod_ip_block_name>
-pod_ipblock_cidr: <pod_ip_block_cidr>
-snat_ippool_name: <snat_ippool_name>
-snat_ippool_cidr: <snat_ippool_cidr>
-start_range: <start_ip>
-end_range: <end_ip>
 os_node_name_list: <os_node_name_list>
-nsx_node_ls_name: <nsx_node_ls_name>
-os_cluster_name: <os_cluster_name>
-nsx_node_lr_name: <nsx_node_lr_name>
 node_network_cidr: <node_network_cidr>
 vc_host: <vc_host>
 vc_user: <vc_user>
 vc_password: <vc_password>
 vms: <vms>
+
+nsx_t0_router_name: t0
+pod_ipblock_name: podIPBlock
+pod_ipblock_cidr: 172.20.20.1/24
+snat_ippool_name: externalIP
+snat_ippool_cidr: 172.20.30.0/24
+start_range: 172.20.30.1
+end_range: 172.20.30.254
+nsx_node_ls_name: node_ls
+os_cluster_name: occl-one
+nsx_node_lr_name: node_lr

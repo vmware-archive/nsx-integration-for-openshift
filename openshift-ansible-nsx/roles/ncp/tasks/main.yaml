@@ -87,12 +87,6 @@
   command: oc adm policy add-scc-to-user ncp-scc -z nsx-node-agent-svc-account
 
 ### Obtain YAML files to run NCP and nsx-node-agent
-- name: Download NCP yaml
-  get_url:
-    url: "{{ ncp_yaml_url }}"
-    dest: /tmp/ncp-rc.yml
-    force: yes
-
 - name: Set service account for ncp
   replace:
     path: /tmp/ncp-rc.yml
