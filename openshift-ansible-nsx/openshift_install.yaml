@@ -1,0 +1,5 @@
+---
+- hosts: single_master
+  roles:
+    - openshift_installation
+

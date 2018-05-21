@@ -1,0 +1,4 @@
+---
+- import_playbook: ncp_prep.yaml
+- import_playbook: openshift_install.yaml
+- import_playbook: ncp.yaml
