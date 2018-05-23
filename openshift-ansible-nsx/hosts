@@ -48,3 +48,6 @@ openshift_hosted_manage_registry=false
 openshift_hosted_manage_router=false
 openshift_enable_service_catalog=false
 openshift_web_console_install=false
+
+# Set openshift_deployment_type
+openshift_deployment_type=openshift-enterprise
