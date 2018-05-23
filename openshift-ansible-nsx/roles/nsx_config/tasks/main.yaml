@@ -95,3 +95,4 @@
   replace:
     path: /tmp/ncp-rc.yml
     regexp: "#external_ip_pools = <None>"
+    replace: "external_ip_pools = {{ external_ip_pools_id.stdout }}"
