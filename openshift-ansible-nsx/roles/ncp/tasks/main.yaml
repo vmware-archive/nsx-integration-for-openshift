@@ -99,7 +99,7 @@
     regexp: "^ *#?cluster =.*"
     line: "    cluster = {{ cluster_name }}"
 
-- name: Set adaptor in ncp.ini:
+- name: Set adaptor in ncp.ini
   replace:
     path: /tmp/ncp-rc.yml
     regexp: "#adaptor = kubernetes"
