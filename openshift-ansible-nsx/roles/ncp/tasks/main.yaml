@@ -99,6 +99,12 @@
     regexp: "^ *#?cluster =.*"
     line: "    cluster = {{ cluster_name }}"
 
+- name: Set adaptor in ncp.ini:
+  replace:
+    path: /tmp/ncp-rc.yml
+    regexp: "#adaptor = kubernetes"
+    replace: "adaptor = openshift"
+
 - name: Set apiserver host IP
   lineinfile:
     path: /tmp/ncp-rc.yml
