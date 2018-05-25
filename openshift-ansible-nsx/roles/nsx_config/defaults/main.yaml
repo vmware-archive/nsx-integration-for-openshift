@@ -18,11 +18,11 @@ vms: <vms>
 
 nsx_t0_router_name: t0
 pod_ipblock_name: podIPBlock
-pod_ipblock_cidr: 172.20.20.1/24
+pod_ipblock_cidr: 172.20.0.0/16
 snat_ippool_name: externalIP
-snat_ippool_cidr: 172.20.30.0/24
-start_range: 172.20.30.1
-end_range: 172.20.30.254
+snat_ippool_cidr: 172.30.0.0/16
+start_range: 172.30.0.1
+end_range: 172.30.255.254
 nsx_node_ls_name: node_ls
 os_cluster_name: occl-one
 nsx_node_lr_name: node_lr
