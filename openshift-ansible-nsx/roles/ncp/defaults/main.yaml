@@ -13,3 +13,4 @@ use_cert: false
 # nsx_api_cert_file: <nsx_api_cert_path>
 # nsx_api_private_key_file: <nsx_api_priv_path>
 cluster_name: occl-one
+use_native_loadbalancer: False
