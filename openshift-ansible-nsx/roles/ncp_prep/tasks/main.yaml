@@ -14,14 +14,9 @@
     url: "{{ ovs_url }}"
     dest: /tmp/ovs.rpm
 
-- name: Download OVS kmod1
+- name: Download OVS kmod
   get_url:
-    url: "{{ ovs_kmod1_url }}"
-    dest: /tmp/ovs_kmod.rpm
-
-- name: Download OVS kmod2
-  get_url:
-    url: "{{ ovs_kmod2_url }}"
+    url: "{{ kmod_ovs_url }}"
     dest: /tmp/kmod_ovs.rpm
 
 - name: Install OVS
@@ -30,13 +25,7 @@
     state: present
   tags: ovs
 
-- name: Install OVS 2.6 Kernel Modules - 1
-  yum:
-    name: /tmp/ovs_kmod.rpm
-    state: present
-  tags: ovs
-
-- name: Install OVS 2.6 Kernel Modules - 2
+- name: Install OVS Kernel Module
   yum:
     name: /tmp/kmod_ovs.rpm
     state: present
@@ -76,9 +65,9 @@
     dest: /tmp/nsx_ncp_rhel.tar
     force: no
 
-- name: Install docker-py 
-  pip: 
-    name: docker-py 
+- name: Install docker-py
+  pip:
+    name: docker-py
 
 # Using docker_image to load tar file to docker image
 - name: Load image from the image tar file
