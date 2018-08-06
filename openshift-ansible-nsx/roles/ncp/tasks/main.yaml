@@ -109,7 +109,7 @@
   replace:
     path: /tmp/ncp-rc.yml
     regexp: "#use_native_loadbalancer = False"
-    replace: "use_native_loadbalancer = {{ use_native_loadbalancer }}
+    replace: "use_native_loadbalancer = {{ use_native_loadbalancer }}"
 
 - name: Set apiserver host IP
   lineinfile:
