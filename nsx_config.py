@@ -116,7 +116,7 @@ class TinyClient(object):
         This exposes the search API.
         :param search_params: a dictionary to specify the filters
         """
-        search_url = '/search'
+        search_url = 'search'
         param_list = []
         for key, value in search_params.items():
             param_list.append('%s:%s' % (key, value))
@@ -485,15 +485,15 @@ class NSXResourceManager(object):
         self.api_client = api_client
 
         self.resource_to_url = {
-            'TransportZone': '/transport-zones',
-            'LogicalRouter': '/logical-routers',
-            'IpBlock': '/pools/ip-blocks',
-            'IpPool': '/pools/ip-pools',
-            'LogicalSwitch': '/logical-switches',
-            'LogicalPort': '/logical-ports',
-            'LogicalRouterPort': '/logical-router-ports',
-            'VIF': '/fabric/vifs',
-            'VM': '/fabric/virtual-machines'
+            'TransportZone': 'transport-zones',
+            'LogicalRouter': 'logical-routers',
+            'IpBlock': 'pools/ip-blocks',
+            'IpPool': 'pools/ip-pools',
+            'LogicalSwitch': 'logical-switches',
+            'LogicalPort': 'logical-ports',
+            'LogicalRouterPort': 'logical-router-ports',
+            'VIF': 'fabric/vifs',
+            'VM': 'fabric/virtual-machines'
         }
 
         self.secondary_resource_to_url = {
