@@ -14,9 +14,14 @@
     url: "{{ ovs_url }}"
     dest: /tmp/ovs.rpm
 
-- name: Download OVS kmod
+- name: Download OVS kmod1
   get_url:
-    url: "{{ kmod_ovs_url }}"
+    url: "{{ ovs_kmod1_url }}"
+    dest: /tmp/ovs_kmod.rpm
+
+- name: Download OVS kmod2
+  get_url:
+    url: "{{ ovs_kmod2_url }}"
     dest: /tmp/kmod_ovs.rpm
 
 - name: Install OVS
@@ -25,7 +30,13 @@
     state: present
   tags: ovs
 
-- name: Install OVS Kernel Module
+- name: Install OVS 2.6 Kernel Modules - 1
+  yum:
+    name: /tmp/ovs_kmod.rpm
+    state: present
+  tags: ovs
+
+- name: Install OVS 2.6 Kernel Modules - 2
   yum:
     name: /tmp/kmod_ovs.rpm
     state: present

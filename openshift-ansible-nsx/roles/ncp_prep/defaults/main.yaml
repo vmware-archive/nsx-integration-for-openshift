@@ -2,7 +2,8 @@
 # update the variable values below before running the ncp_prep role
 cni_url: <cni_url>
 ovs_url: <ovs_url>
-kmod_ovs_url: <url_for_kmod-openvswitch.rpm>
+ovs_kmod1_url: <ovs_kmod1_url>
+ovs_kmod2_url: <ovs_kmod2_url>
 uplink_port: <uplink_port>
 ncp_image_url: <image_url>
 ncp_yaml_url: <ncp_yaml_url>
