@@ -36,6 +36,7 @@ openshift_master_default_subdomain=apps.user.local
 # Tell OpenShift to use CNI for networking
 os_sdn_network_plugin_name=cni
 openshift_use_openshift_sdn=false
+openshift_use_nsx=true
 
 openshift_node_sdn_mtu=1500
 
