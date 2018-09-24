@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 # Copyright 2015 VMware Inc
 # All Rights Reserved
 #
@@ -15,98 +17,188 @@
 
 import optparse
 import os
-import tempfile
+import sys
 
-from vmware_nsxlib import v3  # noqa
-from vmware_nsxlib.v3 import client_cert
-from vmware_nsxlib.v3 import config  # noqa
-from vmware_nsxlib.v3 import resources
-from vmware_nsxlib.v3 import router
+import requests
+from requests.packages.urllib3.exceptions import InsecurePlatformWarning
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
 
 class NSXClient(object):
     """Base NSX REST client"""
 
     def __init__(self, host, username, password, nsx_cert, key,
-                 ca_cert, cluster, read_only, shared_t0):
+                 ca_cert, cluster, remove, t0_uuid, all_res):
         self.host = host
         self.username = username
         self.password = password
         self.nsx_cert = nsx_cert
         self.key = key
+        self.use_cert = bool(self.nsx_cert and self.key)
         self.ca_cert = ca_cert
-        cert_provider = None
-        insecure = True
-        if nsx_cert and key:
-            self.fd, self.certpath = tempfile.mkstemp(dir='/tmp')
-            cert_provider = self._get_cert_provider(self.nsx_cert, self.key)
-            print("Authenticating with NSX using client certificate loaded "
-                  "at %s and private key loaded at %s " % (nsx_cert, key))
-        if ca_cert:
-            insecure = False
-        else:
-            print("Authenticating with NSX using basic authentication")
-
-        nsxlib_config = config.NsxLibConfig(
-            username=self.username,
-            password=self.password,
-            client_cert_provider=cert_provider,
-            insecure=insecure,
-            ca_file=self.ca_cert,
-            nsx_api_managers=[self.host],
-            # allow admin user to delete entities created
-            # under openstack principal identity
-            allow_overwrite_header=True)
         self._cluster = cluster
-        self._read_only = True if read_only == "yes" else False
-        self._shared_t0 = True if shared_t0 == "yes" else False
-        self.nsxlib = v3.NsxLib(nsxlib_config)
-        self._nsx_client = self.nsxlib.client
-        self._ip_pool_client = self._get_ip_pool_client(self._nsx_client)
-        self._router_port_client = self.nsxlib.logical_router_port
-        self._router_client = self._get_router_client(self._nsx_client)
-        self._routerlib = router.RouterLib(
-            self._router_client, self._router_port_client, self.nsxlib)
+        self._remove = remove
+        self._t0_uuid = t0_uuid
+        self._all_res = all_res
+        self.resource_to_url = {
+            'TransportZone': '/transport-zones',
+            'LogicalRouter': '/logical-routers',
+            'IpBlock': '/pools/ip-blocks',
+            'IpPool': '/pools/ip-pools',
+            'LogicalSwitch': '/logical-switches',
+            'LogicalPort': '/logical-ports',
+            'LogicalRouterPort': '/logical-router-ports',
+            'VIF': '/fabric/vifs',
+            'VM': '/fabric/virtual-machines',
+            'LoadBalancerService': '/loadbalancer/services',
+            'FirewallSection': '/firewall/sections',
+            'NSGroup': '/ns-groups',
+            'IPSets': '/ip-sets',
+            'VirtualServer': '/loadbalancer/virtual-servers',
+            'LoadBalancerRule': '/loadbalancer/rules',
+            'LoadBalancerPool': '/loadbalancer/pools',
+            'IPSubnets': '/pools/ip-subnets',
+            'SwitchingProfile': '/switching-profiles',
+            'Certificates': '/trust-management/certificates'
+        }
+        self.header = {'X-Allow-Overwrite': 'true'}
+        self._t0 = self._get_tier0_routers()
 
-    def _get_cert_provider(self, nsx_cert, key):
-        cert_file = self.certpath
-        data_cert_file = nsx_cert
-        data_key_file = key
-        if (not os.path.isfile(data_key_file) and
-                not os.path.isfile(data_cert_file)):
-            print("Filepaths %s and %s do not exist for PEM encoded NSX "
-                  "certificate and key pair."
-                  % (data_cert_file, data_key_file))
-            return
-        # Cert file was not created or is no longer found in filesystem
-        filenames = [data_key_file, data_cert_file]
-        # Create a single file from the cert and key data since NSX expects
-        # one single file for certificate.
-        with open(cert_file, 'w') as c_file:
-            for filename in filenames:
-                try:
-                    with open(filename) as fname:
-                        for line in fname:
-                            c_file.write(line)
-                except Exception as e:
-                    print("Unable to write file %s to create client cert: "
-                          "%s" % (filename, str(e)))
-                    return
-        print("Successfully created certificate file %s for NSX client "
-              "connection." % cert_file)
-        return client_cert.ClientCertProvider(cert_file)
+    def _get_tier0_routers(self):
+        if not self._t0_uuid:
+            all_t0_routers = self.get_logical_routers(tier='TIER0')
+            tier0_routers = self.get_ncp_resources(all_t0_routers)
+        else:
+            router_response = self.get_logical_routers_by_uuid(self._t0_uuid)
+            if router_response.get('httpStatus') == 'NOT_FOUND':
+                tier0_routers = []
+            else:
+                tier0_routers = [router_response]
+        if not tier0_routers:
+            raise Exception("Error: Missing cluster tier-0 router")
+        if len(tier0_routers) > 1:
+            raise Exception("Found %d tier-0 routers " % len(tier0_routers))
+        return tier0_routers[0]
 
-    def _get_router_client(self, nsx_client):
-        return resources.LogicalRouter(nsx_client)
+    def _resource_url(self, resource_type):
+        return self.host + '/api/v1' + self.resource_to_url[resource_type]
 
-    def _get_ip_pool_client(self, nsx_client):
-        return resources.IpPool(nsx_client)
+    def make_get_call(self, full_url):
+        if self.use_cert:
+            return requests.get('https://' + full_url, cert=(self.nsx_cert,
+                                                             self.key),
+                                headers=self.header,
+                                verify=False).json()
+        else:
+            return requests.get('https://' + full_url, auth=(self.username,
+                                                             self.password),
+                                headers=self.header,
+                                verify=False).json()
+
+    def make_post_call(self, full_url, body):
+        if self.use_cert:
+            return requests.post('https://' + full_url, cert=(self.nsx_cert,
+                                                             self.key),
+                                headers=self.header,
+                                verify=False, json=body)
+        else:
+            return requests.post('https://' + full_url, auth=(self.username,
+                                                             self.password),
+                                headers=self.header,
+                                verify=False, json=body)
+
+    def make_delete_call(self, full_url):
+        if self.use_cert:
+            return requests.delete('https://' + full_url, cert=(self.nsx_cert,
+                                                                self.key),
+                                   headers=self.header,
+                                   verify=False)
+        else:
+            return requests.delete('https://' + full_url, auth=(self.username,
+                                                                self.password),
+                                   headers=self.header,
+                                   verify=False)
+
+    def get_resource_by_type(self, resource_type):
+        resource_url = self._resource_url(resource_type)
+        print(resource_url)
+        res = []
+        r_json = self.make_get_call(resource_url)
+        while 'cursor' in r_json:
+            res += r_json['results']
+            url_with_paging = resource_url + '?' + 'cursor=' + r_json['cursor']
+            r_json = self.make_get_call(url_with_paging)
+        res += r_json['results']
+        return res
+
+    def get_resource_by_type_and_id(self, resource_type, uuid):
+        resource_url = self._resource_url(resource_type) + '/' + uuid
+        print(resource_url)
+        return self.make_get_call(resource_url)
+
+    def get_resource_by_query_param(self, resource_type, query_param_type,
+                                    query_param_id):
+        resource_url = self._resource_url(resource_type)
+        full_url = (resource_url + '/?' +
+                    query_param_type + '=' + query_param_id)
+        print(full_url)
+        return self.make_get_call(full_url)
+
+    def get_resource_by_param(self, resource_type, param_type, param_val):
+        resource_url = self._resource_url(resource_type)
+        full_url = resource_url + '?' + param_type + '=' + param_val
+        print(full_url)
+        return self.make_get_call(full_url)
+
+    def get_secondary_resource(self, resource_type, uuid, secondary_resource):
+        resource_url = self._resource_url(resource_type)
+        print(resource_url)
+        full_url = resource_url + '/' + uuid + '/' + secondary_resource
+        print(full_url)
+        return self.make_get_call(full_url)
+
+    def delete_secondary_resource_by_id(
+            self, resource_type, uuid, secondary_resource, secondary_uuid):
+        resource_url = self._resource_url(resource_type)
+        full_url = (resource_url + '/' + uuid + '/' + secondary_resource +
+                    '/' + secondary_uuid)
+        print(full_url)
+        res = self.make_delete_call(full_url)
+        if res.status_code != requests.codes.ok:
+            raise Exception(res.text)
+
+    def delete_resource_by_type_and_id(self, resource_type, uuid):
+        resource_url = self._resource_url(resource_type) + '/' + uuid
+        print(resource_url)
+        res = self.make_delete_call(resource_url)
+        if res.status_code != requests.codes.ok:
+            raise Exception(res.text)
+
+    def delete_resource_by_type_and_id_and_param(self, resource_type, uuid,
+                                                 param_type, param_val):
+        resource_url = self._resource_url(resource_type) + '/' + uuid
+        full_url = resource_url + '?' + param_type + '=' + param_val
+        print(full_url)
+        res = self.make_delete_call(full_url)
+        if res.status_code != requests.codes.ok:
+            raise Exception(res.text)
+
+    # used to update with API calls: POST url/resource/uuid?para=para_val
+    def update_resource_by_type_and_id_and_param(self, resource_type, uuid,
+                                                 param_type, param_val, body):
+        resource_url = self._resource_url(resource_type) + '/' + uuid
+        full_url = resource_url + '?' + param_type + '=' + param_val
+        print(full_url)
+        res = self.make_post_call(full_url, body)
+        if res.status_code != requests.codes.ok:
+            raise Exception(res.text)
+        return res
 
     def get_logical_ports(self):
         """
         Retrieve all logical ports on NSX backend
         """
-        return self.nsxlib.logical_port.list()['results']
+        return self.get_resource_by_type('LogicalPort')
 
     def get_ncp_logical_ports(self):
         """
@@ -116,29 +208,19 @@ class NSXClient(object):
             self.get_logical_ports())
         return lports
 
-    def update_logical_port_attachment(self, lports):
-        """
-        In order to delete logical ports, we need to detach
-        the VIF attachment on the ports first.
-        """
-        for p in lports:
-            try:
-                self.nsxlib.logical_port.update(
-                    p['id'], None, attachment_type=None)
-            except Exception as e:
-                print("ERROR: Failed to update lport %s: %s" % (p['id'], e))
-
     def _cleanup_logical_ports(self, lports):
         # logical port vif detachment
-        self.update_logical_port_attachment(lports)
-        for p in lports:
+        for lport in lports:
+            if self.is_node_lsp(lport):
+                continue
             try:
-                self.nsxlib.logical_port.delete(p['id'])
+                self.delete_resource_by_type_and_id_and_param(
+                    'LogicalPort', lport['id'], 'detach', 'true')
             except Exception as e:
                 print("ERROR: Failed to delete logical port %s, error %s" %
-                      (p['id'], e))
+                      (lport['id'], e))
             else:
-                print("Successfully deleted logical port %s" % p['id'])
+                print("Successfully deleted logical port %s" % lport['id'])
 
     def cleanup_ncp_logical_ports(self):
         """
@@ -147,24 +229,27 @@ class NSXClient(object):
         ncp_lports = self.get_ncp_logical_ports()
         print("Number of NCP Logical Ports to be deleted: %s" %
               len(ncp_lports))
-        if self._read_only:
+        if not self._remove:
             return
         self._cleanup_logical_ports(ncp_lports)
 
-    def _is_ncp_resource(self, tags):
-        correct_cluster_tag = False
-        has_version_tag = False
-        for tag in tags:
-            if (tag.get('scope') == 'ncp/cluster' and
-                    tag.get('tag') == self._cluster):
-                correct_cluster_tag = True
-            if tag.get('scope') == 'ncp/version':
-                has_version_tag = True
-        return correct_cluster_tag and has_version_tag
+    def is_node_lsp(self, lport):
+        # Node LSP can be updated by NCP to be parent VIF type, but could also
+        # be a normal VIF without context before NCP updates it
+        if lport.get('attachment'):
+            if (lport['attachment']['attachment_type'] == 'VIF' and
+                (not lport['attachment']['context'] or
+                 lport['attachment']['context']['vif_type'] == 'PARENT')):
+                return True
+        return False
 
-    def _is_ncp_cluster_resource(self, tags):
+    def _is_ncp_resource(self, tags):
         return any(tag.get('scope') == 'ncp/cluster' and
                    tag.get('tag') == self._cluster for tag in tags)
+
+    def _is_ncp_ha_resource(self, tags):
+        return any(tag.get('scope') == 'ncp/ha' and
+                   tag.get('tag') == 'true' for tag in tags)
 
     def _is_ncp_shared_resource(self, tags):
         return any(tag.get('scope') == 'ncp/shared_resource' and
@@ -178,14 +263,6 @@ class NSXClient(object):
                          if self._is_ncp_resource(r['tags'])]
         return ncp_resources
 
-    def get_ncp_cluster_resources(self, resources):
-        """
-        Get all logical resources with ncp/cluster tag
-        """
-        ncp_cluster_resources = [r for r in resources if 'tags' in r
-                                 if self._is_ncp_cluster_resource(r['tags'])]
-        return ncp_cluster_resources
-
     def get_ncp_shared_resources(self, resources):
         """
         Get all logical resources with ncp/cluster tag
@@ -198,7 +275,7 @@ class NSXClient(object):
         """
         Retrieve all logical switches on NSX backend
         """
-        return self.nsxlib.logical_switch.list()['results']
+        return self.get_resource_by_type('LogicalSwitch')
 
     def get_ncp_logical_switches(self):
         """
@@ -231,13 +308,15 @@ class NSXClient(object):
             lports = self.get_lswitch_ports(ls['id'])
             if lports:
                 print("Number of orphan Logical Ports to be "
-                      "deleted: %s" % len(lports))
-                if not self._read_only:
+                      "deleted: %s for ls %s" % (len(lports),
+                                                 ls['display_name']))
+                if self._remove:
                     self._cleanup_logical_ports(lports)
-            if self._read_only:
+            if not self._remove:
                 continue
             try:
-                self.nsxlib.logical_switch.delete(ls['id'])
+                self.delete_resource_by_type_and_id_and_param(
+                    'LogicalSwitch', ls['id'], 'cascade', 'true')
             except Exception as e:
                 print("ERROR: Failed to delete logical switch %s-%s, "
                       "error %s" % (ls['display_name'], ls['id'], e))
@@ -250,7 +329,8 @@ class NSXClient(object):
                 continue
             ip_pool_id = ls['ip_pool_id']
             try:
-                ip_pool = self.nsxlib.ip_pool.get(ip_pool_id)
+                ip_pool = self.get_resource_by_type_and_id('IpPool',
+                                                           ip_pool_id)
             except Exception as e:
                 # TODO: Needs to look into ncp log to see why
                 # the pool is gone during k8s conformance test
@@ -265,32 +345,35 @@ class NSXClient(object):
 
             # Remove router port to logical switch using router port client
             try:
-                self._router_port_client.delete_by_lswitch_id(ls['id'])
+                rep = self.get_resource_by_query_param(
+                    'LogicalRouterPort', 'logical_switch_id', ls['id'])
+                lp = rep['results']
+                if lp:
+                    self.delete_resource_by_type_and_id(
+                        'LogicalRouterPort', lp['id'])
             except Exception as e:
                 print("Failed to delete logical router port by logical "
                       "switch %s : %s" % (ls['display_name'], e))
             else:
-                print("Successfullu deleted logical router port by logical "
+                print("Successfully deleted logical router port by logical "
                       "switch %s" % ls['display_name'])
 
             if not subnet or not subnet_id:
                 return
-            all_t0_routers = self.get_logical_routers(tier='TIER0')
-            if self._shared_t0:
-                tier0_routers = self.get_ncp_shared_resources(all_t0_routers)
-            else:
-                tier0_routers = self.get_ncp_cluster_resources(all_t0_routers)
-            if not tier0_routers:
-                print("Error: Missing cluster tier-0 router")
-                return
-            if len(tier0_routers) > 1:
-                print("Found %d tier-0 routers " % len(tier0_routers))
-                return
-            t0_id = tier0_routers[0]['id']
+            t0_id = self._t0['id']
             print("Unconfiguring nat rules for %s from t0" % subnet)
             try:
-                self.nsxlib.logical_router.delete_nat_rule_by_values(
-                    t0_id, match_source_network=subnet)
+                snat_rules = self.get_secondary_resource(
+                    'LogicalRouter', t0_id, 'nat/rules')
+                ncp_snat_rules = self.get_ncp_resources(snat_rules['results'])
+                ncp_snat_rule = None
+                for snat_rule in ncp_snat_rules:
+                    if snat_rule['match_source_network'] == subnet:
+                        ncp_snat_rule = snat_rule
+                        break
+                self.release_snat_external_ip(ncp_snat_rule)
+                self.delete_secondary_resource_by_id(
+                    'LogicalRouter', t0_id, 'nat/rules', ncp_snat_rule['id'])
             except Exception as e:
                 print("ERROR: Failed to unconfigure nat rule for %s "
                       "from t0: %s" % (subnet, e))
@@ -303,7 +386,7 @@ class NSXClient(object):
                 print("Deleting ip_pool %s" % ip_pool['display_name'])
                 self._cleanup_ip_pool(ip_pool)
                 print("Deleting IP block subnet %s" % subnet)
-                self.nsxlib.ip_block_subnet.delete(subnet_id)
+                self.delete_resource_by_type_and_id('IPSubnets', subnet_id)
             except Exception as e:
                 print("ERROR: Failed to delete %s, error %s" %
                       (subnet, e))
@@ -314,7 +397,7 @@ class NSXClient(object):
         """
         Retrieve all firewall sections
         """
-        return self.nsxlib.firewall_section.list()
+        return self.get_resource_by_type('FirewallSection')
 
     def get_ncp_firewall_sections(self):
         """
@@ -331,11 +414,12 @@ class NSXClient(object):
         fw_sections = self.get_ncp_firewall_sections()
         print("Number of Firewall Sections to be deleted: %s" %
               len(fw_sections))
-        if self._read_only:
+        if not self._remove:
             return
         for fw in fw_sections:
             try:
-                self.nsxlib.firewall_section.delete(fw['id'])
+                self.delete_resource_by_type_and_id_and_param(
+                    'FirewallSection', fw['id'], 'cascade', 'true')
             except Exception as e:
                 print("Failed to delete firewall section %s: %s" %
                       (fw['display_name'], e))
@@ -344,24 +428,27 @@ class NSXClient(object):
                       fw['display_name'])
 
     def get_ns_groups(self):
+        return self.get_resource_by_type('NSGroup')
+
+    def get_ns_ncp_groups(self):
         """
         Retrieve all NSGroups on NSX backend
         """
-        backend_groups = self.nsxlib.ns_group.list()
-        ns_groups = self.get_ncp_resources(backend_groups)
+        ns_groups = self.get_ncp_resources(self.get_ns_groups())
         return ns_groups
 
     def cleanup_ncp_ns_groups(self):
         """
         Cleanup all NSGroups created by NCP
         """
-        ns_groups = self.get_ns_groups()
+        ns_groups = self.get_ns_ncp_groups()
         print("Number of NSGroups to be deleted: %s" % len(ns_groups))
-        if self._read_only:
+        if not self._remove:
             return
         for nsg in ns_groups:
             try:
-                self.nsxlib.ns_group.delete(nsg['id'])
+                self.delete_resource_by_type_and_id_and_param(
+                    'NSGroup', nsg['id'], 'force', 'true')
             except Exception as e:
                 print("Failed to delete NSGroup: %s: %s" %
                       (nsg['display_name'], e))
@@ -375,22 +462,12 @@ class NSXClient(object):
         # used in tag scopes or values
         return data.replace('/', '\\/').replace('-', '\\-')
 
+    def get_ip_sets(self):
+        return self.get_resource_by_type('IPSets')
+
     def get_ncp_ip_sets(self):
-        """
-        Retrieve all ip set using search API
-        """
-        tag = {
-            'scope': self._escape_data('ncp/cluster'),
-            'tag': self._escape_data(self._cluster)
-        }
-        try:
-            ip_sets = self.nsxlib.search_by_tags(
-                resource_type='IPSet', tags=[tag])
-        except Exception as e:
-            print("Failed to get IPSet for cluster %s: %s" %
-                  (self._cluster, e))
-            return []
-        return ip_sets['results']
+        ip_sets = self.get_ncp_resources(self.get_ip_sets())
+        return ip_sets
 
     def cleanup_ncp_ip_sets(self):
         """
@@ -398,11 +475,12 @@ class NSXClient(object):
         """
         ip_sets = self.get_ncp_ip_sets()
         print("Number of IP-Sets to be deleted: %d" % len(ip_sets))
-        if self._read_only:
+        if not self._remove:
             return
         for ip_set in ip_sets:
             try:
-                self.nsxlib.ip_set.delete(ip_set['id'])
+                self.delete_resource_by_type_and_id_and_param(
+                    'IPSets', ip_set['id'], 'force', 'true')
             except Exception as e:
                 print("Failed to delete IPSet: %s: %s" %
                       (ip_set['display_name'], e))
@@ -415,9 +493,17 @@ class NSXClient(object):
         Retrieve all the logical routers based on router type. If tier
         is None, it will return all logical routers.
         """
-        lrouters = self.nsxlib.logical_router.list(
-            router_type=tier)['results']
+        lrouters = self.get_resource_by_type('LogicalRouter')
+        if tier:
+            lrouters = [router for router in lrouters
+                        if router['router_type'] == tier]
         return lrouters
+
+    def get_logical_routers_by_uuid(self, uuid):
+        """
+        Retrieve the logical router with specified UUID.
+        """
+        return self.get_resource_by_type_and_id('LogicalRouter', uuid)
 
     def get_ncp_logical_routers(self):
         """
@@ -430,7 +516,9 @@ class NSXClient(object):
         """
         Get all logical ports attached to lrouter
         """
-        return self.nsxlib.logical_router_port.get_by_router_id(lrouter['id'])
+        return self.get_resource_by_param('LogicalRouterPort',
+                                          'logical_router_id',
+                                          lrouter['id'])['results']
 
     def get_ncp_logical_router_ports(self, lrouter):
         """
@@ -445,11 +533,12 @@ class NSXClient(object):
         """
         lports = self.get_ncp_logical_router_ports(lrouter)
         print("Number of logical router ports to be deleted: %s" % len(lports))
-        if self._read_only:
+        if not self._remove:
             return
         for lp in lports:
             try:
-                self.nsxlib.logical_router_port.delete(lp['id'])
+                self.delete_resource_by_type_and_id(
+                    'LogicalRouterPort', lp['id'])
             except Exception as e:
                 print("Failed to delete logical router port %s-%s, "
                       "and response is %s" %
@@ -473,11 +562,42 @@ class NSXClient(object):
             return
         print("External ip %s to be released from pool %s" %
               (external_ip, external_pool_id))
-        if self._read_only:
+        if not self._remove:
             return
-        ip_pool_client = self.nsxlib.ip_pool
         try:
-            ip_pool_client.release(external_pool_id, external_ip)
+            body = {"allocation_id": external_ip}
+            self.update_resource_by_type_and_id_and_param(
+                'IpPool', external_pool_id, 'action', 'RELEASE',
+                body=body)
+        except Exception as e:
+            print("ERROR: Failed to release ip %s from external_pool %s, "
+                  "error %s" % (external_ip, external_pool_id, e))
+        else:
+            print("Successfully release ip %s from external_pool %s"
+                  % (external_ip, external_pool_id))
+
+    def release_snat_external_ip(self, snat_rule):
+        print("Releasing translated_network for snat %s" % snat_rule['id'])
+        external_pool_id = None
+        if 'tags' in snat_rule:
+            for tag in snat_rule['tags']:
+                if tag.get('scope') == 'ncp/extpoolid':
+                    external_pool_id = tag.get('tag')
+                    break
+        if not external_pool_id:
+            return
+        external_ip = snat_rule.get('translated_network')
+        if not external_ip:
+            return
+        print("External ip %s to be released from pool %s" %
+              (external_ip, external_pool_id))
+        if not self._remove:
+            return
+        try:
+            body = {"allocation_id": external_ip}
+            self.update_resource_by_type_and_id_and_param(
+                'IpPool', external_pool_id, 'action', 'RELEASE',
+                body=body)
         except Exception as e:
             print("ERROR: Failed to release ip %s from external_pool %s, "
                   "error %s" % (external_ip, external_pool_id, e))
@@ -498,18 +618,38 @@ class NSXClient(object):
         for lr in lrouters:
             self.cleanup_logical_router_ports(lr)
             self.release_logical_router_external_ip(lr)
-            if self._read_only:
+            if not self._remove:
                 continue
             if lr['router_type'] == 'TIER0':
                 continue
             try:
-                self.nsxlib.logical_router.delete(lr['id'], force=True)
+                self.delete_resource_by_type_and_id_and_param(
+                    'LogicalRouter', lr['id'], 'force', 'true')
             except Exception as e:
                 print("ERROR: Failed to delete logical router %s-%s, "
                       "error %s" % (lr['display_name'], lr['id'], e))
             else:
                 print("Successfully deleted logical router %s-%s" %
                       (lr['display_name'], lr['id']))
+
+    def cleanup_ncp_router_ports(self):
+        ncp_router_ports = self.get_ncp_resources(
+            self.get_resource_by_type('LogicalRouterPort'))
+        print("Number of orphane logical router ports to be deleted %d"
+              % len(ncp_router_ports))
+        if not self._remove:
+            return
+        for router_port in ncp_router_ports:
+            try:
+                self.delete_resource_by_type_and_id_and_param(
+                    'LogicalRouterPort', router_port['id'], 'force', 'true')
+            except Exception as e:
+                print("Failed to delete logical router port %s-%s, "
+                      "and response is %s" %
+                      (router_port['display_name'], router_port['id'], e))
+            else:
+                print("Successfully deleted logical router port %s-%s" %
+                      (router_port['display_name'], router_port['id']))
 
     def cleanup_ncp_tier0_logical_ports(self):
         """
@@ -518,36 +658,51 @@ class NSXClient(object):
         """
         tier1_routers = self.get_ncp_resources(
             self.get_logical_routers(tier='TIER1'))
-        tier0_routers = self.get_ncp_shared_resources(
-            self.get_logical_routers(tier='TIER0'))
-        if not tier0_routers:
-            print("Error: Missing cluster tier-0 router")
-            return
-        if len(tier0_routers) > 1:
-            print("Found %d tier-0 routers " % len(tier0_routers))
-            return
-
-        t0 = tier0_routers[0]
+        t0 = self._t0
         for t1 in tier1_routers:
             print("Router link port from %s to %s to be removed" %
                   (t0['display_name'], t1['display_name']))
-            if self._read_only:
-                continue
             try:
-                self._routerlib.remove_router_link_port(
-                    t1['id'], t0['id'])
+                self.remove_router_link_port(t1['id'])
             except Exception as e:
                 print("Error removing router link port from %s to %s" %
                       (t0['display_name'], t1['display_name']), e)
             else:
-                print("successfully remove link port for ",
-                      t1['display_name'], t0['display_name'])
+                if not self._remove:
+                    continue
+                print("successfully remove link port for %s and %s" %
+                      (t1['display_name'], t0['display_name']))
+
+    def get_tier1_link_port(self, t1_uuid):
+        logical_router_ports = self.get_resource_by_param(
+            'LogicalRouterPort', 'logical_router_id', t1_uuid)['results']
+        for port in logical_router_ports:
+            if port['resource_type'] == 'LogicalRouterLinkPortOnTIER1':
+                return port
+
+    def remove_router_link_port(self, t1_uuid):
+        tier1_link_port = self.get_tier1_link_port(t1_uuid)
+        if not tier1_link_port:
+            print("Warning: Logical router link port for tier1 router: %s "
+                  "not found at the backend", t1_uuid)
+            return
+        t1_link_port_id = tier1_link_port['id']
+        t0_link_port_id = (
+            tier1_link_port['linked_logical_router_port_id'].get('target_id'))
+        print("Removing t1_link_port %s" % t1_link_port_id)
+        print("Removing t0_link_port %s" % t0_link_port_id)
+        if not self._remove:
+            return
+        self.delete_resource_by_type_and_id(
+            'LogicalRouterPort', t1_link_port_id)
+        self.delete_resource_by_type_and_id(
+            'LogicalRouterPort', t0_link_port_id)
 
     def get_ip_pools(self):
         """
         Retrieve all ip_pools on NSX backend
         """
-        return self.nsxlib.ip_pool.list()['results']
+        return self.get_resource_by_type('IpPool')
 
     def get_ncp_get_ip_pools(self):
         """
@@ -561,14 +716,22 @@ class NSXClient(object):
     def _cleanup_ip_pool(self, ip_pool):
         if not ip_pool:
             return
-        ip_pool_client = self.nsxlib.ip_pool
-        allocations = ip_pool_client.get_allocations(ip_pool['id'])
+        allocations = self.get_secondary_resource('IpPool', ip_pool['id'],
+                                                  'allocations')
+        print("Number of IPs to be released %s" % len(allocations))
         if 'results' in allocations:
             for allocation in allocations['results']:
                 allocated_ip = allocation['allocation_id']
-                ip_pool_client.release(ip_pool['id'], allocated_ip)
-
-        ip_pool_client.delete(ip_pool['id'])
+                body = {"allocation_id": allocated_ip}
+                try:
+                    self.update_resource_by_type_and_id_and_param(
+                        'IpPool', ip_pool['id'], 'action', 'RELEASE',
+                        body=body)
+                except Exception as e:
+                    print("ERROR: Failed to release ip %s from Ip pool %s "
+                          "error: %s" % (allocated_ip, ip_pool['id'], e))
+        self.delete_resource_by_type_and_id_and_param('IpPool', ip_pool['id'],
+                                                      'force', 'true')
 
     def cleanup_ncp_ip_pools(self):
         """
@@ -577,14 +740,14 @@ class NSXClient(object):
         ip_pools = self.get_ncp_get_ip_pools()
         print("Number of IP Pools to be deleted: %s" %
               len(ip_pools))
-        if self._read_only:
+        if not self._remove:
             return
         for ip_pool in ip_pools:
             if 'tags' in ip_pool:
                 is_external = False
                 for tag in ip_pool['tags']:
-                    if tag.get('scope') == 'ncp/external' \
-                            and tag.get('tag') == 'true':
+                    if (tag.get('scope') == 'ncp/external' and
+                        tag.get('tag') == 'true'):
                         is_external = True
                         break
                 if is_external:
@@ -603,11 +766,12 @@ class NSXClient(object):
         lb_services = self.get_ncp_lb_services()
         print("Number of Loadbalance services to be delted: %s" %
               len(lb_services))
-        if self._read_only:
+        if not self._remove:
             return
         for lb_svc in lb_services:
             try:
-                self.nsxlib.load_balancer.service.delete(lb_svc['id'])
+                self.delete_resource_by_type_and_id('LoadBalancerService',
+                                                    lb_svc['id'])
             except Exception as e:
                 print("ERROR: Failed to delete lb_service %s-%s, error %s" %
                       (lb_svc['display_name'], lb_svc['id'], e))
@@ -620,18 +784,19 @@ class NSXClient(object):
         return self.get_ncp_resources(lb_services)
 
     def get_lb_services(self):
-        return self.nsxlib.load_balancer.service.list()['results']
+        return self.get_resource_by_type('LoadBalancerService')
 
     def cleanup_ncp_lb_virtual_servers(self):
         lb_virtual_servers = self.get_ncp_lb_virtual_servers()
         print("Number of loadbalancer virtual servers to be delted: %s" %
               len(lb_virtual_servers))
-        if self._read_only:
-            return
         for lb_vs in lb_virtual_servers:
             self.release_lb_virtual_server_external_ip(lb_vs)
+            if not self._remove:
+                continue
             try:
-                self.nsxlib.load_balancer.virtual_server.delete(lb_vs['id'])
+                self.delete_resource_by_type_and_id('VirtualServer',
+                                                    lb_vs['id'])
             except Exception as e:
                 print("ERROR: Failed to delete lv_virtual_server %s-%s, "
                       "error %s" % (lb_vs['display_name'], lb_vs['id'], e))
@@ -650,15 +815,18 @@ class NSXClient(object):
                     external_pool_id = tag.get('tag')
         if not external_pool_id:
             return
-        ip_pool_client = self.nsxlib.ip_pool
+
         print("Releasing external IP %s-%s "
               "of lb virtual server %s from external pool %s" %
               (lb_vs['display_name'], lb_vs['id'],
                external_ip, external_pool_id))
-        if self._read_only:
+        if not self._remove:
             return
         try:
-            ip_pool_client.release(external_pool_id, external_ip)
+            body = {"allocation_id": external_ip}
+            self.update_resource_by_type_and_id_and_param(
+                'IpPool', external_pool_id, 'action', 'RELEASE',
+                body=body)
         except Exception as e:
             print("ERROR: Failed to release ip %s from external_pool %s, "
                   "error %s" % (external_ip, external_pool_id, e))
@@ -671,17 +839,18 @@ class NSXClient(object):
         return self.get_ncp_resources(lb_virtual_servers)
 
     def get_virtual_servers(self):
-        return self.nsxlib.load_balancer.virtual_server.list()['results']
+        return self.get_resource_by_type('VirtualServer')
 
     def cleanup_ncp_lb_rules(self):
         lb_rules = self.get_ncp_lb_rules()
         print("Number of loadbalancer rules to be delted: %s" %
               len(lb_rules))
-        if self._read_only:
+        if not self._remove:
             return
         for lb_rule in lb_rules:
             try:
-                self.nsxlib.load_balancer.rule.delete(lb_rule['id'])
+                self.delete_resource_by_type_and_id('LoadBalancerRule',
+                                                    lb_rule['id'])
             except Exception as e:
                 print("ERROR: Failed to delete lb_rule %s-%s, "
                       "error %s" % (lb_rule['display_name'],
@@ -695,17 +864,18 @@ class NSXClient(object):
         return self.get_ncp_resources(lb_rules)
 
     def get_lb_rules(self):
-        return self.nsxlib.load_balancer.rule.list()['results']
+        return self.get_resource_by_type('LoadBalancerRule')
 
     def cleanup_ncp_lb_pools(self):
         lb_pools = self.get_ncp_lb_pools()
         print("Number of loadbalancer pools to be delted: %s" %
               len(lb_pools))
-        if self._read_only:
+        if not self._remove:
             return
         for lb_pool in lb_pools:
             try:
-                self.nsxlib.load_balancer.pool.delete(lb_pool['id'])
+                self.delete_resource_by_type_and_id('LoadBalancerPool',
+                                                    lb_pool['id'])
             except Exception as e:
                 print("ERROR: Failed to delete lb_pool %s-%s, "
                       "error %s" % (lb_pool['display_name'],
@@ -719,7 +889,29 @@ class NSXClient(object):
         return self.get_ncp_resources(lb_pools)
 
     def get_lb_pools(self):
-        return self.nsxlib.load_balancer.pool.list()['results']
+        return self.get_resource_by_type('LoadBalancerPool')
+
+    def get_ip_blocks(self):
+        return self.get_resource_by_type('IpBlock')
+
+    def get_ncp_ip_blocks(self):
+        ip_blocks = self.get_ip_blocks()
+        return self.get_ncp_resources(ip_blocks)
+
+    def get_switching_profiles(self):
+        sw_profiles = self.get_resource_by_type('SwitchingProfile')
+        return sw_profiles
+
+    def get_ncp_switching_profiles(self):
+        sw_profiles = self.get_switching_profiles()
+        return self.get_ncp_resources(sw_profiles)
+
+    def get_l7_resource_certs(self):
+        return self.get_resource_by_type('Certificates')
+
+    def get_ncp_l7_resource_certs(self):
+        l7_resource_certs = self.get_l7_resource_certs()
+        return self.get_ncp_resources(l7_resource_certs)
 
     def cleanup_cert(self):
         if self.nsx_cert and self.key:
@@ -730,6 +922,115 @@ class NSXClient(object):
                       "has been removed" % self.certpath)
             except OSError as e:
                 print("Error when during cert file cleanup %s" % e)
+
+    def cleanup_ncp_snat_rules(self):
+        t0 = self._t0
+        snat_rules = self.get_secondary_resource(
+            'LogicalRouter', t0['id'], 'nat/rules')
+        ncp_snat_rules = self.get_ncp_resources(snat_rules['results'])
+        print("Number of snat rules to be deleted: %s" %
+              len(ncp_snat_rules))
+        if not self._remove:
+            return
+        for snat_rule in ncp_snat_rules:
+            print(snat_rule)
+            try:
+                self.release_snat_external_ip(snat_rule)
+                self.delete_secondary_resource_by_id(
+                    'LogicalRouter', t0['id'], 'nat/rules', snat_rule['id'])
+            except Exception as e:
+                print("ERROR: Failed to delete snat_rule for %s-%s, "
+                      "error %s" % (snat_rule['translated_network'],
+                                    snat_rule['id'], e))
+            else:
+                print("Successfully deleted snat_rule for %s-%s" %
+                      (snat_rule['translated_network'], snat_rule['id']))
+
+    def cleanup_ncp_ip_blocks(self):
+        ip_blocks = self.get_ncp_ip_blocks()
+        print("Number of ip blocks to be deleted: %s" %
+              len(ip_blocks))
+        if not self._remove:
+            return
+        for ip_block in ip_blocks:
+            try:
+                self.delete_resource_by_type_and_id('IpBlock',
+                                                    ip_block['id'])
+            except Exception as e:
+                print("ERROR: Failed to delete ip_block %s-%s, "
+                      "error %s" % (ip_block['display_name'],
+                                    ip_block['id'], e))
+            else:
+                print("Successfully deleted ip_block %s-%s" %
+                      (ip_block['display_name'], ip_block['id']))
+
+    def cleanup_ncp_ha_switching_profiles(self):
+        ncp_switching_profiles = self.get_ncp_switching_profiles()
+        switching_profiles = [sp for sp in ncp_switching_profiles if 'tags' in
+                              sp if self._is_ncp_ha_resource(sp['tags'])]
+        print("Number of switching profiles to be deleted: %s" %
+              len(switching_profiles))
+        if not self._remove:
+            return
+        for switching_profile in switching_profiles:
+            try:
+                self.delete_resource_by_type_and_id('SwitchingProfile',
+                                                    switching_profile['id'])
+            except Exception as e:
+                print("ERROR: Failed to delete switching_profile %s-%s, "
+                      "error %s" % (switching_profile['display_name'],
+                                    switching_profile['id'], e))
+            else:
+                print("Successfully deleted switching_profile %s-%s" %
+                      (switching_profile['display_name'],
+                       switching_profile['id']))
+
+    def cleanup_ncp_external_ip_pools(self):
+        """
+        Delete all external ip pools created from NCP
+        """
+        ip_pools = self.get_ncp_get_ip_pools()
+        external_ip_pools = []
+        for ip_pool in ip_pools:
+            if 'tags' in ip_pool:
+                for tag in ip_pool['tags']:
+                    if (tag.get('scope') == 'ncp/external' and
+                        tag.get('tag') == 'true'):
+                        external_ip_pools.append(ip_pool)
+        print("Number of external IP Pools to be deleted: %s" %
+              len(external_ip_pools))
+        if not self._remove:
+            return
+
+        for ext_ip_pool in external_ip_pools:
+            try:
+                self._cleanup_ip_pool(ext_ip_pool)
+            except Exception as e:
+                print("ERROR: Failed to delete external ip pool %s:%s, "
+                      "error %s" % (ext_ip_pool['display_name'],
+                                    ext_ip_pool['id'], e))
+            else:
+                print("Successfully deleted external ip pool %s-%s" %
+                      (ext_ip_pool['display_name'], ext_ip_pool['id']))
+
+    def cleanup_ncp_l7_resource_certs(self):
+        l7_resource_certs = self.get_ncp_l7_resource_certs()
+        print("Number of l7 resource certs to be deleted: %s" %
+              len(l7_resource_certs))
+        if not self._remove:
+            return
+        for l7_resource_cert in l7_resource_certs:
+            try:
+                self.delete_resource_by_type_and_id('Certificates',
+                                                    l7_resource_cert['id'])
+            except Exception as e:
+                print("ERROR: Failed to delete l7_resource_cert %s-%s, "
+                      "error %s" % (l7_resource_cert['display_name'],
+                                    l7_resource_cert['id'], e))
+            else:
+                print("Successfully deleted l7_resource_cert %s-%s" %
+                      (l7_resource_cert['display_name'],
+                       l7_resource_cert['id']))
 
     def cleanup_all(self):
         """
@@ -757,34 +1058,64 @@ class NSXClient(object):
         self.cleanup_ncp_tier0_logical_ports()
         self.cleanup_ncp_logical_ports()
         self.cleanup_ncp_logical_routers()
+        self.cleanup_ncp_router_ports()
         self.cleanup_ncp_logical_switches()
+        self.cleanup_ncp_snat_rules()
         self.cleanup_ncp_ip_pools()
-        self.cleanup_cert()
+        self.cleanup_ncp_l7_resource_certs()
+        if self._all_res:
+            self.cleanup_ncp_ip_blocks()
+            self.cleanup_ncp_ha_switching_profiles()
+            self.cleanup_ncp_external_ip_pools()
 
+
+def validate_options(options):
+    if not options.mgr_ip or not options.cluster:
+        print("Required arguments missing. Run '<script_name> -h' for usage")
+        sys.exit(1)
+    if (not options.password and not options.username and
+        not options.nsx_cert and not options.key):
+        print("Required authentication parameter missing. "
+              "Run '<script_name> -h' for usage")
+        sys.exit(1)
 
 if __name__ == "__main__":
 
     parser = optparse.OptionParser()
     parser.add_option("--mgr-ip", dest="mgr_ip", help="NSX Manager IP address")
-    parser.add_option("-u", "--username", default="admin", dest="username",
+    parser.add_option("-u", "--username", default="", dest="username",
                       help="NSX Manager username, ignored if nsx-cert is set")
-    parser.add_option("-p", "--password", default="Admin!23Admin",
+    parser.add_option("-p", "--password", default="",
                       dest="password",
                       help="NSX Manager password, ignored if nsx-cert is set")
     parser.add_option("-n", "--nsx-cert", default="", dest="nsx_cert",
                       help="NSX certificate path")
     parser.add_option("-k", "--key", default="", dest="key",
                       help="NSX client private key path")
-    parser.add_option("-c", "--cluster", default="kubernetes", dest="cluster",
+    parser.add_option("-c", "--cluster", dest="cluster",
                       help="Cluster to be removed")
     parser.add_option("-t", "--ca-cert", default="", dest="ca_cert",
                       help="NSX ca_certificate")
-    parser.add_option("-r", "--read-only", default="yes", dest="read_only",
-                      help="Read only mode")
-    parser.add_option("-s", "--shared-t0", default="yes", dest="shared_t0",
-                      help="Is T0 tagged with shared_resource or not")
+    parser.add_option("-r", "--remove", action='store_true',
+                      dest="remove", help="CAVEAT: Removes NSX resources. "
+                                          "If not set will do dry-run.")
+    parser.add_option("--t0-uuid", dest="t0_uuid",
+                      help="Specify the tier-0 router uuid. Must be "
+                           "specified if Tier-0 router does not have the "
+                           "cluster tag")
+    parser.add_option("--all-res", dest="all_res",
+                      help=("Also clean up HA switching profile, ipblock, "
+                            "external ippool. These resources could be "
+                            "created by PAS NSX-T Tile"), action='store_true')
+    parser.add_option("--no-warning", action="store_true", dest="no_warning",
+                      help="Disable urllib's insecure request warning")
     (options, args) = parser.parse_args()
 
+    if options.no_warning:
+        requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+        requests.packages.urllib3.disable_warnings(InsecurePlatformWarning)
+
+    validate_options(options)
     # Get NSX REST client
     nsx_client = NSXClient(host=options.mgr_ip,
                            username=options.username,
@@ -793,6 +1124,7 @@ if __name__ == "__main__":
                            key=options.key,
                            ca_cert=options.ca_cert,
                            cluster=options.cluster,
-                           read_only=options.read_only,
-                           shared_t0=options.shared_t0)
+                           remove=options.remove,
+                           t0_uuid=options.t0_uuid,
+                           all_res=options.all_res)
     nsx_client.cleanup_all()
