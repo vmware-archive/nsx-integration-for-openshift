@@ -172,6 +172,10 @@ def getargs():
                         default="Admin!23Admin",
                         help='Optional. The MP password. Default: '
                              'Admin!23Admin')
+    parser.add_argument('--BMC',
+                        dest="for_BMC",
+                        default="false",
+                        help='Will disable configure node_ls, node_lr')
     parser.add_argument('--k8scluster',
                         dest="k8scluster",
                         default="",
@@ -585,6 +589,8 @@ class ConfigurationManager(object):
         self.username = args.mp_user
         self.password = args.mp_password
 
+        self.for_bmc = False if args.for_BMC == 'false' else True
+
         self.cluster_name = args.k8scluster
         self.transport_zone_name = args.tz
 
@@ -881,8 +887,9 @@ class ConfigurationManager(object):
         self.handle_transport_zone()
         self.handle_t0_router()
         self.handle_ipblocks()
-        self.handle_vif()
-        self.handle_t1_router()
+        if not self.for_bmc:
+            self.handle_vif()
+            self.handle_t1_router()
 
 
 def main():
