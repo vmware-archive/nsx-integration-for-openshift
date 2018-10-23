@@ -1,5 +1,6 @@
 ---
 # update the variable values below before running the ncp_prep role
+BMC: false
 cni_url: <cni_url>
 ovs_url: <ovs_url>
 kmod_ovs_url: <url_for_kmod-openvswitch.rpm>

@@ -13,22 +13,26 @@
   get_url:
     url: "{{ ovs_url }}"
     dest: /tmp/ovs.rpm
+  when: BMC == false
 
 - name: Download OVS kmod
   get_url:
     url: "{{ kmod_ovs_url }}"
     dest: /tmp/kmod_ovs.rpm
+  when: BMC == false
 
 - name: Install OVS
   yum:
     name: /tmp/ovs.rpm
     state: present
   tags: ovs
+  when: BMC == false
 
 - name: Install OVS Kernel Module
   yum:
     name: /tmp/kmod_ovs.rpm
     state: present
+  when: BMC == false
 
 # https://docs.ansible.com/ansible/systemd_module.html
 # systemctl start openvswitch.service
@@ -36,6 +40,7 @@
   systemd:
     name: openvswitch
     state: started
+  when: BMC == false
 
 - name: Create OVS bridge
   openvswitch_bridge: bridge=br-int state=present fail_mode=standalone
@@ -43,6 +48,7 @@
     external_ids:
         bridge-id: "br-int"
   tags: ovs
+  when: BMC == false
 
 - name: Add the Uplink Port to OVS
   openvswitch_port:
@@ -51,12 +57,15 @@
     state: present
     set: Interface {{ uplink_port }} ofport_request=1
   tags: ovs
+  when: BMC == false
 
 - name: Bring up br-int
   command: "ip link set br-int up"
+  when: BMC == false
 
 - name: Bring up node-if
   command: "ip link set {{ uplink_port }} up"
+  when: BMC == false
 
 ## Get NCP tar file and make it docker image
 - name: Download ncp image tar file
