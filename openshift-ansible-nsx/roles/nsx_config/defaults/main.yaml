@@ -9,6 +9,10 @@ use_cert: false
 nsx_manager_ip: <ip>
 nsx_edge_cluster_name: <nsx_edge_cluster_name>
 nsx_transport_zone_name: <nsx_transport_zone_name>
+
+# when BMC is set to true, os_node_name_list node_network_cidr vc_host
+# vc_user and vc_password are not used, thus can be left as is or removed.
+BMC: false
 os_node_name_list: <os_node_name_list>
 node_network_cidr: <node_network_cidr>
 vc_host: <vc_host>
