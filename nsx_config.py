@@ -14,17 +14,6 @@ from urllib import urlencode
 from vmware_nsxlib import v3  # noqa
 from vmware_nsxlib.v3 import config  # noqa
 
-from com.vmware import cis_client
-from com.vmware.vcenter.vm import hardware_client
-from com.vmware import vcenter_client
-import requests
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
-from vmware.vapi.lib.connect import get_requests_connector
-from vmware.vapi.security.session import create_session_security_context
-from vmware.vapi.security.user_password import \
-    create_user_password_security_context
-from vmware.vapi.stdlib.client.factories import StubConfigurationFactory
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -306,6 +295,18 @@ def add_tag(py_dict, tag_dict):
 
 
 class VMNetworkManager(object):
+
+    from com.vmware import cis_client
+    from com.vmware.vcenter.vm import hardware_client
+    from com.vmware import vcenter_client
+    import requests
+    from requests.packages.urllib3.exceptions import InsecureRequestWarning
+    from vmware.vapi.lib.connect import get_requests_connector
+    from vmware.vapi.security.session import create_session_security_context
+    from vmware.vapi.security.user_password import \
+        create_user_password_security_context
+    from vmware.vapi.stdlib.client.factories import StubConfigurationFactory
+
     def __init__(self, args):
         self.host = args.vc_host
         self.user = args.vc_user
@@ -583,7 +584,6 @@ class NSXResourceManager(object):
 class ConfigurationManager(object):
     def __init__(self, args, api_client):
         self.resource_manager = NSXResourceManager(api_client)
-        self.vm_network_manager = VMNetworkManager(args)
 
         self.manager_ip = args.mp_ip
         self.username = args.mp_user
@@ -604,12 +604,14 @@ class ConfigurationManager(object):
         self.start_range = args.start_range
         self.end_range = args.end_range
 
-        self.mac_to_node_name = {}
-        self.node_ls_name = args.node_ls
-        self.node_lr_name = args.node_lr
-        self.node_network_cidr = args.node_network_cidr
-        self.vm_list = args.vms.split(',')
-        self.node_list = args.node_list.split(',')
+        if not self.for_bmc:
+            self.vm_network_manager = VMNetworkManager(args)
+            self.mac_to_node_name = {}
+            self.node_ls_name = args.node_ls
+            self.node_lr_name = args.node_lr
+            self.node_network_cidr = args.node_network_cidr
+            self.vm_list = args.vms.split(',')
+            self.node_list = args.node_list.split(',')
 
     def _has_tags(self, resource, required_tags):
         if not required_tags:
