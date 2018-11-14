@@ -1,5 +1,6 @@
 ---
 # update the variable values below before running the ncp_prep role
+BMC: false
 cni_url: <cni_url>
 ncp_image_url: <image_url>
 ncp_yaml_url: <ncp_yaml_url>
