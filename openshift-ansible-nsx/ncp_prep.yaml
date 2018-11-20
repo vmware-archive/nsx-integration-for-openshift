@@ -2,8 +2,12 @@
 ---
 # run the ncp_prep role on each node of the cluster
 - hosts: OSEv3
+  vars_files:
+    - vars/global.yaml
   roles:
     - ncp_prep
-- hosts: single_master
+- hosts: jumphost
+  vars_files:
+    - vars/global.yaml
   roles:
     - nsx_config

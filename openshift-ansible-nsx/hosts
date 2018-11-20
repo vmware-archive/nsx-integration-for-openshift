@@ -1,11 +1,10 @@
 [masters]
 admin.rhel.osmaster ansible_ssh_host=101.101.101.4
 
-[single_master]
-admin.rhel.osmaster ansible_ssh_host=101.101.101.4
 
 [etcd]
 osmaster
+
 
 [nodes]
 admin.rhel.osmaster ansible_ssh_host=101.101.101.4 openshift_ip=101.101.101.4 openshift_schedulable=true openshift_hostname=admin.rhel.osmaster
@@ -54,3 +53,11 @@ openshift_console_install=false
 
 # Set openshift_deployment_type
 openshift_deployment_type=openshift-enterprise
+
+
+[jumphost]
+# This is the host where nsx_config.py and nsx_cleanup.py can be run
+# (usually one of masters/nodes).
+# nsx_config.py requires dependencies downloaded from Internet. Thus use
+# a jumphost with Internet access if cluster is air-gapped.
+jumphost ansible_ssh_host=101.101.101.4

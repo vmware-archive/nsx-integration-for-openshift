@@ -87,6 +87,12 @@
   command: oc adm policy add-scc-to-user ncp-scc -z nsx-node-agent-svc-account
 
 ### Obtain YAML files to run NCP and nsx-node-agent
+- name: Download NCP yaml
+  get_url:
+    url: "{{ ncp_yaml_url }}"
+    dest: /tmp/ncp-rc.yml
+    force: yes
+
 - name: Set service account for ncp
   replace:
     path: /tmp/ncp-rc.yml
@@ -110,6 +116,30 @@
     path: /tmp/ncp-rc.yml
     regexp: "#use_native_loadbalancer = False"
     replace: "use_native_loadbalancer = {{ use_native_loadbalancer }}"
+
+- name: Specify overlay_tz in ncp-rc
+  replace:
+    path: /tmp/ncp-rc.yml
+    regexp: "#overlay_tz = <None>"
+    replace: "overlay_tz = {{ nsx_transport_zone_name }}"
+
+- name: Specify T0 router in ncp-rc
+  replace:
+    path: /tmp/ncp-rc.yml
+    regexp: "#tier0_router = <None>"
+    replace: "tier0_router = {{ nsx_t0_router_name }}"
+
+- name: Specify container_ip_blocks in ncp-rc
+  replace:
+    path: /tmp/ncp-rc.yml
+    regexp: "#container_ip_blocks = <None>"
+    replace: "container_ip_blocks = {{ pod_ipblock_name }}"
+
+- name: Specify external_ip_pools in ncp-rc
+  replace:
+    path: /tmp/ncp-rc.yml
+    regexp: "#external_ip_pools = <None>"
+    replace: "external_ip_pools = {{ snat_ippool_name }}"
 
 - name: Set apiserver host IP
   lineinfile:

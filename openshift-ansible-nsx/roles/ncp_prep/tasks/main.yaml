@@ -83,9 +83,3 @@
 
 - name: Tag image as nsx-ncp
   shell: docker tag "{{ nsx_ncp_rhel.stdout.split()[0] }}" nsx-ncp
-
-- name: Download NCP yaml
-  get_url:
-    url: "{{ ncp_yaml_url }}"
-    dest: /tmp/ncp-rc.yml
-    force: yes

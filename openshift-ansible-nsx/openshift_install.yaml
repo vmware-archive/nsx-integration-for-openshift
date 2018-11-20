@@ -1,5 +1,5 @@
 ---
-- hosts: single_master
+- hosts: masters[0]
   roles:
     - openshift_installation
 
