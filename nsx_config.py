@@ -683,7 +683,7 @@ class ConfigurationManager(object):
         self.resource_manager.update_secondary_resource(
             'LogicalRouter', t0['id'],
             'Routing_Redistribution', redistribution)
-        sys.stdout.write("t0_router: %s " % t0['id'])        
+        sys.stdout.write("t0_router: %s " % t0['id'])
 
     def _handle_ipblock(self, ipblock_name, ipblock_cidr, required_tags):
         # handle ipblock configuration for a specific block name
@@ -856,11 +856,10 @@ class ConfigurationManager(object):
                     att_id = vm_info["lport_attachment_id"]
                     lsp_info = self.resource_manager.get_all(
                         'LogicalPort', params={"attachment_id": att_id})
-                    if not lsp_info:
-                        continue
-                    else:
-                        lsp = lsp_info[0]
-                        id_port[vmid] = lsp
+                    for lsp in lsp_info:
+                        if lsp['logical_switch_id'] == node_ls['id']:
+                            id_port[vmid] = lsp
+                            break
 
         for (vm_name, node_name) in zip(self.vm_list, self.node_list):
             lsp = id_port.get(vms_id[vm_name])

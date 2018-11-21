@@ -65,10 +65,6 @@
     dest: /tmp/nsx_ncp_rhel.tar
     force: no
 
-- name: Install docker-py
-  pip:
-    name: docker-py
-
 # Using docker_image to load tar file to docker image
 - name: Load image from the image tar file
   docker_image:
