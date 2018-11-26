@@ -2,10 +2,6 @@
 ---
 - hosts: 127.0.0.1
   tasks:
-    - name: Install docker-py
-      pip:
-        name: docker-py
-
     - name: Install python-devel
       yum:
         name: python-devel

@@ -67,14 +67,10 @@
 
 # Using docker_image to load tar file to docker image
 - name: Load image from the image tar file
-  docker_image:
-    name: nsx_ncp_rhel
-    timeout: 300
-    state: present
-    load_path: /tmp/nsx_ncp_rhel.tar
+  shell: docker load -i /tmp/nsx_ncp_rhel.tar
 
 - name: Register the docker image name
-  shell: docker images | grep nsx-ncp-rhel
+  shell: docker images | grep nsx-ncp-rhel | head -n1
   register: nsx_ncp_rhel
 
 - name: Tag image as nsx-ncp
