@@ -1,39 +1,55 @@
 ---
+- name: Check if nsxlib and sc sdk packages have been installed
+  shell: python -c "from vmware_nsxlib.v3 import config; from vmware.vapi.lib.connect import get_requests_connector"
+  register: dep_info
+  ignore_errors: True
+
 - name: Install python-devel
   yum:
     name: python-devel
     state: latest
+  when: dep_info.failed == true
 
 - name: Install vmware-nsxlib
   pip:
     name: vmware-nsxlib
     version: 11.1.4
     state: present
+  when: dep_info.failed == true
 
 - name: Download VSphere Automation SDK
   git:
-      repo: "https://github.com/vmware/vsphere-automation-sdk-python"
-      dest: /tmp/vsphere-automation-sdk-python/
-      version: v6.6.1
+    repo: "https://github.com/vmware/vsphere-automation-sdk-python"
+    dest: /tmp/vsphere-automation-sdk-python/
+    version: v6.6.1
+  when: dep_info.failed == true
 
 - name: Install VSphere Automation SDK
   pip:
-      requirements: /tmp/vsphere-automation-sdk-python/requirements.txt
-      extra_args: --extra-index-url /tmp/vsphere-automation-sdk-python/lib/
-      state: present
+    requirements: /tmp/vsphere-automation-sdk-python/requirements.txt
+    extra_args: --extra-index-url /tmp/vsphere-automation-sdk-python/lib/
+    state: present
+  when: dep_info.failed == true
+
+- name: remove vsphere sdk git dir
+  file:
+    path: /tmp/vsphere-automation-sdk-python/
+    state: absent
+  when: dep_info.failed == true
 
 - name: Install pyOpenSSL 16.2.0
   pip:
-      name: pyOpenSSL
-      version: 16.2.0
+    name: pyOpenSSL
+    version: 16.2.0
+  when: dep_info.failed == true
 
 - name: NSX management plane resource configuration with cert
-  command: "python {{ inventory_dir }}/../nsx_config.py --cert {{ nsx_cert_file_path }} --mp {{ nsx_manager_ip }} --k8scluster {{ os_cluster_name }} --edge_cluster {{ nsx_edge_cluster_name }} --tz {{ nsx_transport_zone_name }} --t0 {{ nsx_t0_router_name }} --pod_ipblock_name {{ pod_ipblock_name }} --pod_ipblock_cidr {{ pod_ipblock_cidr }} --snat_ippool_name {{ snat_ippool_name }} --snat_ippool_cidr {{ snat_ippool_cidr }} --start_range {{ start_range }} --end_range {{ end_range }} --node {{ os_node_name_list }} --node_ls {{ nsx_node_ls_name }} --node_lr {{ nsx_node_lr_name }} --node_network_cidr {{ node_network_cidr }} --vc_host {{ vc_host }} --vc_user {{ vc_user }} --vc_password {{ vc_password }} --vms {{ vms }}"
+  command: "python '{{ playbook_dir }}'/../nsx_config.py --cert {{ nsx_cert_file_path }} --mp {{ nsx_manager_ip }} --k8scluster {{ cluster_name }} --edge_cluster {{ nsx_edge_cluster_name }} --tz {{ nsx_transport_zone_name }} --t0 {{ nsx_t0_router_name }} --pod_ipblock_name {{ pod_ipblock_name }} --pod_ipblock_cidr {{ pod_ipblock_cidr }} --snat_ippool_name {{ snat_ippool_name }} --snat_ippool_cidr {{ snat_ippool_cidr }} --start_range {{ start_range }} --end_range {{ end_range }} --node {{ os_node_name_list }} --node_ls {{ nsx_node_ls_name }} --node_lr {{ nsx_node_lr_name }} --node_network_cidr {{ node_network_cidr }} --vc_host {{ vc_host }} --vc_user {{ vc_user }} --vc_password {{ vc_password }} --vms {{ vms }}"
   when: perform_nsx_config == True and use_cert == True
   register: nsx_config_result
 
 - name: NSX management plane resource configuration with user name
-  command: "python {{ inventory_dir }}/../nsx_config.py --user {{ nsx_api_user }} --password {{ nsx_api_password }} --mp {{ nsx_manager_ip }} --k8scluster {{ os_cluster_name }} --edge_cluster {{ nsx_edge_cluster_name }} --tz {{ nsx_transport_zone_name }} --t0 {{ nsx_t0_router_name }} --pod_ipblock_name {{ pod_ipblock_name }} --pod_ipblock_cidr {{ pod_ipblock_cidr }} --snat_ippool_name {{ snat_ippool_name }} --snat_ippool_cidr {{ snat_ippool_cidr }} --start_range {{ start_range }} --end_range {{ end_range }} --node {{ os_node_name_list }} --node_ls {{ nsx_node_ls_name }} --node_lr {{ nsx_node_lr_name }} --node_network_cidr {{ node_network_cidr }} --vc_host {{ vc_host }} --vc_user {{ vc_user }} --vc_password {{ vc_password }} --vms {{ vms }}"
+  command: "python '{{ playbook_dir }}'/../nsx_config.py --user {{ nsx_api_user }} --password {{ nsx_api_password }} --mp {{ nsx_manager_ip }} --k8scluster {{ cluster_name }} --edge_cluster {{ nsx_edge_cluster_name }} --tz {{ nsx_transport_zone_name }} --t0 {{ nsx_t0_router_name }} --pod_ipblock_name {{ pod_ipblock_name }} --pod_ipblock_cidr {{ pod_ipblock_cidr }} --snat_ippool_name {{ snat_ippool_name }} --snat_ippool_cidr {{ snat_ippool_cidr }} --start_range {{ start_range }} --end_range {{ end_range }} --node {{ os_node_name_list }} --node_ls {{ nsx_node_ls_name }} --node_lr {{ nsx_node_lr_name }} --node_network_cidr {{ node_network_cidr }} --vc_host {{ vc_host }} --vc_user {{ vc_user }} --vc_password {{ vc_password }} --vms {{ vms }}"
   when: perform_nsx_config == True and use_cert == False
   register: nsx_config_result
 
@@ -72,27 +88,3 @@
 - name: Showing external_ip_pools id
   debug:
     msg: "external_ip_pools id: {{ external_ip_pools_id.stdout }}"
-
-- name: Specify overlay_tz in ncp-rc
-  replace:
-    path: /tmp/ncp-rc.yml
-    regexp: "#overlay_tz = <None>"
-    replace: "overlay_tz = {{ overlay_tz_id.stdout }}"
-
-- name: Specify T0 router in ncp-rc
-  replace:
-    path: /tmp/ncp-rc.yml
-    regexp: "#tier0_router = <None>"
-    replace: "tier0_router = {{ t0_id.stdout }}"
-
-- name: Specify container_ip_blocks in ncp-rc
-  replace:
-    path: /tmp/ncp-rc.yml
-    regexp: "#container_ip_blocks = <None>"
-    replace: "container_ip_blocks = {{ container_ip_blocks_id.stdout }}"
-
-- name: Specify external_ip_pools in ncp-rc
-  replace:
-    path: /tmp/ncp-rc.yml
-    regexp: "#external_ip_pools = <None>"
-    replace: "external_ip_pools = {{ external_ip_pools_id.stdout }}"

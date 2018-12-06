@@ -65,27 +65,13 @@
     dest: /tmp/nsx_ncp_rhel.tar
     force: no
 
-- name: Install docker-py
-  pip:
-    name: docker-py
-
 # Using docker_image to load tar file to docker image
 - name: Load image from the image tar file
-  docker_image:
-    name: nsx_ncp_rhel
-    timeout: 300
-    state: present
-    load_path: /tmp/nsx_ncp_rhel.tar
+  shell: docker load -i /tmp/nsx_ncp_rhel.tar
 
 - name: Register the docker image name
-  shell: docker images | grep nsx-ncp-rhel
+  shell: docker images | grep nsx-ncp-rhel | head -n1
   register: nsx_ncp_rhel
 
 - name: Tag image as nsx-ncp
   shell: docker tag "{{ nsx_ncp_rhel.stdout.split()[0] }}" nsx-ncp
-
-- name: Download NCP yaml
-  get_url:
-    url: "{{ ncp_yaml_url }}"
-    dest: /tmp/ncp-rc.yml
-    force: yes

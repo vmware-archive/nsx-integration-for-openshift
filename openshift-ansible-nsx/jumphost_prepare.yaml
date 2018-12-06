@@ -1,0 +1,36 @@
+# to run: ansible-playbook -i /PATH/TO/HOSTS/hosts ncp.yaml
+---
+- hosts: 127.0.0.1
+  tasks:
+    - name: Install python-devel
+      yum:
+        name: python-devel
+        state: latest
+
+    - name: Install vmware-nsxlib
+      pip:
+        name: vmware-nsxlib
+        version: 11.1.4
+        state: present
+
+    - name: Download VSphere Automation SDK
+      git:
+        repo: "https://github.com/vmware/vsphere-automation-sdk-python"
+        dest: /tmp/vsphere-automation-sdk-python/
+        version: v6.6.1
+
+    - name: Install VSphere Automation SDK
+      pip:
+        requirements: /tmp/vsphere-automation-sdk-python/requirements.txt
+        extra_args: --extra-index-url /tmp/vsphere-automation-sdk-python/lib/
+        state: present
+
+    - name: remove vsphere sdk git dir
+      file:
+        path: /tmp/vsphere-automation-sdk-python/
+        state: absent
+
+    - name: Install pyOpenSSL 16.2.0
+      pip:
+        name: pyOpenSSL
+        version: 16.2.0
