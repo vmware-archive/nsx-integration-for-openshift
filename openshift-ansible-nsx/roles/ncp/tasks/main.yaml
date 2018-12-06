@@ -195,6 +195,13 @@
         replace: "nsx_api_private_key_file = /etc/nsx-ujo/nsx_priv_key"
   when: use_cert == true
 
+- name: Set node_type to BAREMETAL for bmc env
+  replace:
+        path: /tmp/ncp-rc.yml
+        regexp: "#node_type = HOSTVM"
+        replace: "node_type = BAREMETAL"
+  when: BMC == true or BMC == True
+
 # Ensure idempotency
 - name: Check whether /tmp/ncp-rc.yml contains "nsx-priv-key"
   command: grep "nsx-priv-key" /tmp/ncp-rc.yml
@@ -270,6 +277,20 @@
     path: /tmp/nsx-node-agent-ds.yml
     regexp: "^ *#?apiserver_host_port =.*"
     line: "    apiserver_host_port = 8443"
+
+- name: Set node_type to BAREMETAL for bmc env for node-agent
+  replace:
+        path: /tmp/nsx-node-agent-ds.yml
+        regexp: "#node_type = HOSTVM"
+        replace: "node_type = BAREMETAL"
+  when: BMC == true or BMC == True
+
+- name: Set ovs_bridge to BAREMETAL for bmc env for node-agent
+  replace:
+        path: /tmp/nsx-node-agent-ds.yml
+        regexp: "#ovs_bridge = br-int"
+        replace: "ovs_bridge = nsx-managed"
+  when: BMC == true or BMC == True
 
 - name: Override default node selector
   command: oc patch namespace nsx-system -p '{"metadata":{"annotations":{"openshift.io/node-selector":""}}}'

@@ -44,3 +44,4 @@ use_native_loadbalancer: False
 
 # when configuring BMC environment, ovs, bridge and vc configuration is not needed
 BMC: false
+nsx_transport_node_name: <nsx_transport_node_name>

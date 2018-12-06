@@ -179,6 +179,10 @@ def getargs():
                         default="",
                         help='Name of the transport zone to be created and '
                              'tagged. ')
+    parser.add_argument('--tn',
+                        dest="tn",
+                        default="",
+                        help='Name of the transport node to be tagged. ')
     parser.add_argument('--t0',
                         dest="t0",
                         default="",
@@ -296,26 +300,24 @@ def add_tag(py_dict, tag_dict):
 
 class VMNetworkManager(object):
 
-    from com.vmware import cis_client
-    from com.vmware.vcenter.vm import hardware_client
-    from com.vmware import vcenter_client
-    import requests
-    from requests.packages.urllib3.exceptions import InsecureRequestWarning
-    from vmware.vapi.lib.connect import get_requests_connector
-    from vmware.vapi.security.session import create_session_security_context
-    from vmware.vapi.security.user_password import \
-        create_user_password_security_context
-    from vmware.vapi.stdlib.client.factories import StubConfigurationFactory
-
     def __init__(self, args):
         self.host = args.vc_host
         self.user = args.vc_user
         self.pwd = args.vc_password
-        self.skip_verfication = args.skip_verfication
-        self.cert_path = args.cert_path
-        self.vms = args.vms
         self.node_ls_name = args.node_ls
         self.node_list = args.node_list
+        from com.vmware import cis_client
+        from com.vmware.vcenter.vm import hardware_client
+        from com.vmware import vcenter_client
+        import requests
+        from requests.packages.urllib3.exceptions import InsecureRequestWarning
+        from vmware.vapi.lib.connect import get_requests_connector
+        from vmware.vapi.security.session import \
+            create_session_security_context
+        from vmware.vapi.security.user_password import \
+            create_user_password_security_context
+        from vmware.vapi.stdlib.client.factories import \
+            StubConfigurationFactory
 
     def get_jsonrpc_endpoint_url(self, host):
         # The URL for the stub requests are made against the /api HTTP
@@ -491,6 +493,7 @@ class NSXResourceManager(object):
 
         self.resource_to_url = {
             'TransportZone': 'transport-zones',
+            'TransportNode': 'transport-nodes',
             'LogicalRouter': 'logical-routers',
             'IpBlock': 'pools/ip-blocks',
             'IpPool': 'pools/ip-pools',
@@ -593,6 +596,7 @@ class ConfigurationManager(object):
 
         self.cluster_name = args.k8scluster
         self.transport_zone_name = args.tz
+        self.transport_node_name = args.tn
 
         self.t0_router_name = args.t0
         self.edge_cluster_name = args.edge_cluster
@@ -664,6 +668,16 @@ class ConfigurationManager(object):
             'TransportZone', self.transport_zone_name, params, required_tags,
             use_search_api=False)
         sys.stdout.write("overlay_tz: %s " % overlay_tz['id'])
+
+    def handle_transport_node(self):
+        required_tags = [{"scope": NCP_CLUSTER_KEY, "tag": self.cluster_name},
+                         {"scope": NCP_NODE_KEY,
+                          "tag": self.transport_node_name}]
+        transport_node = self._handle_general_configuration(
+            'TransportNode', self.transport_node_name, None, None,
+            use_search_api=False)
+        transport_node['tags'] = required_tags
+        self.resource_manager.update_resource(transport_node)
 
     def handle_t0_router(self):
         edge_cluster = self.resource_manager.get_resource_by_type_and_name(
@@ -892,6 +906,8 @@ class ConfigurationManager(object):
         if not self.for_bmc:
             self.handle_vif()
             self.handle_t1_router()
+        else:
+            self.handle_transport_node()
 
 
 def main():
