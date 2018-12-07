@@ -596,7 +596,7 @@ class ConfigurationManager(object):
 
         self.cluster_name = args.k8scluster
         self.transport_zone_name = args.tz
-        self.transport_node_name = args.tn
+        self.transport_node_names = args.tn.split(',')
 
         self.t0_router_name = args.t0
         self.edge_cluster_name = args.edge_cluster
@@ -670,14 +670,16 @@ class ConfigurationManager(object):
         sys.stdout.write("overlay_tz: %s " % overlay_tz['id'])
 
     def handle_transport_node(self):
-        required_tags = [{"scope": NCP_CLUSTER_KEY, "tag": self.cluster_name},
-                         {"scope": NCP_NODE_KEY,
-                          "tag": self.transport_node_name}]
-        transport_node = self._handle_general_configuration(
-            'TransportNode', self.transport_node_name, None, None,
-            use_search_api=False)
-        transport_node['tags'] = required_tags
-        self.resource_manager.update_resource(transport_node)
+        for transport_node_name in self.transport_node_names:
+            required_tags = [{"scope": NCP_CLUSTER_KEY,
+                              "tag": self.cluster_name},
+                             {"scope": NCP_NODE_KEY,
+                              "tag": transport_node_name}]
+            transport_node = self._handle_general_configuration(
+                'TransportNode', transport_node_name, None, None,
+                use_search_api=False)
+            transport_node['tags'] = required_tags
+            self.resource_manager.update_resource(transport_node)
 
     def handle_t0_router(self):
         edge_cluster = self.resource_manager.get_resource_by_type_and_name(
