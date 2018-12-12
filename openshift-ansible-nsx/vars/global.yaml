@@ -45,3 +45,6 @@ use_native_loadbalancer: False
 # when configuring BMC environment, ovs, bridge and vc configuration is not needed
 BMC: false
 nsx_transport_node_names: <nsx_transport_node_name>
+
+# set to true is manual start of kube proxy is needed
+manual_start_kube_proxy: false
