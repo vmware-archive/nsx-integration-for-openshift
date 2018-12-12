@@ -1,4 +1,28 @@
 ---
+## start kube_proxy for oc 3.10 and later
+- name: Add library to ansible.cfg
+  replace:
+    path: "{{ openshift_dir }}/ansible.cfg"
+    regexp: "\\[defaults\\]"
+    replace: "[defaults]\nlibrary = roles/lib_utils/library/"
+  when: manual_start_kube_proxy != false
+
+- name: create create_proxy under playbooks dir
+  shell: "echo '---\n- import_playbook: byo/openshift_facts.yml\n- hosts: OSEv3' > {{ openshift_dir }}/playbooks/create_proxy.yaml"
+  when: manual_start_kube_proxy != false
+
+- name: create create_proxy under playbooks dir
+  shell: 'echo "  roles:" >> {{ openshift_dir }}/playbooks/create_proxy.yaml'
+  when: manual_start_kube_proxy != false
+
+- name: create create_proxy under playbooks dir
+  shell: 'echo "    - kube_proxy_and_dns" >> {{ openshift_dir }}/playbooks/create_proxy.yaml'
+  when: manual_start_kube_proxy != false
+
+- name: run playbook create_proxy
+  shell: "ansible-playbook -i {{ playbook_dir }}/hosts {{ openshift_dir }}/playbooks/create_proxy.yaml"
+  when: manual_start_kube_proxy != false
+
 ## Configure Service Account for NCP
 - name: Check if nsx-system project exists
   command: oc get project nsx-system
