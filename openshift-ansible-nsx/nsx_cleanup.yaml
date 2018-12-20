@@ -2,5 +2,7 @@
 ---
 # run the nsx_cleanup role on master
 - hosts: jumphost
+  vars_files:
+    - vars/global.yaml
   roles:
     - nsx_cleanup

@@ -43,3 +43,14 @@ use_native_loadbalancer: False
 # nsx_api_private_key_file: <nsx_api_priv_path>
 
 manual_start_kube_proxy: false
+openshift_dir: <openshift_ansible_dir>
+
+# set when cleanup required parameters are cluster_name, nsx_manager_ip,
+# nsx_api_user, nsx_api_password
+nsx_cleanup_script_path: <nsx_config_script_path>
+# t0 uuid of the cluster
+t0_uuid: <t0_uuid>
+# If use_cert is set to true, you can skip setting nsx user and password
+# Uncomment and set correct path for the following two lines if use_cert is set to true
+# nsx_api_cert_file: <nsx_api_cert_path>
+# nsx_api_private_key_file: <nsx_api_priv_path>
