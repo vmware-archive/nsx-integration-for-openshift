@@ -59,9 +59,11 @@ class NSXClient(object):
             'LoadBalancerPool': '/loadbalancer/pools',
             'IPSubnets': '/pools/ip-subnets',
             'SwitchingProfile': '/switching-profiles',
-            'Certificates': '/trust-management/certificates'
+            'Certificates': '/trust-management/certificates',
+            'PersistenceProfile': '/loadbalancer/persistence-profiles'
         }
         self.header = {'X-Allow-Overwrite': 'true'}
+        self.authenticate()
         self._t0 = self._get_tier0_routers()
 
     def _get_tier0_routers(self):
@@ -764,7 +766,7 @@ class NSXClient(object):
 
     def cleanup_ncp_lb_services(self):
         lb_services = self.get_ncp_lb_services()
-        print("Number of Loadbalance services to be delted: %s" %
+        print("Number of Loadbalance services to be deleted: %s" %
               len(lb_services))
         if not self._remove:
             return
@@ -788,7 +790,7 @@ class NSXClient(object):
 
     def cleanup_ncp_lb_virtual_servers(self):
         lb_virtual_servers = self.get_ncp_lb_virtual_servers()
-        print("Number of loadbalancer virtual servers to be delted: %s" %
+        print("Number of loadbalancer virtual servers to be deleted: %s" %
               len(lb_virtual_servers))
         for lb_vs in lb_virtual_servers:
             self.release_lb_virtual_server_external_ip(lb_vs)
@@ -843,7 +845,7 @@ class NSXClient(object):
 
     def cleanup_ncp_lb_rules(self):
         lb_rules = self.get_ncp_lb_rules()
-        print("Number of loadbalancer rules to be delted: %s" %
+        print("Number of loadbalancer rules to be deleted: %s" %
               len(lb_rules))
         if not self._remove:
             return
@@ -868,7 +870,7 @@ class NSXClient(object):
 
     def cleanup_ncp_lb_pools(self):
         lb_pools = self.get_ncp_lb_pools()
-        print("Number of loadbalancer pools to be delted: %s" %
+        print("Number of loadbalancer pools to be deleted: %s" %
               len(lb_pools))
         if not self._remove:
             return
@@ -890,6 +892,29 @@ class NSXClient(object):
 
     def get_lb_pools(self):
         return self.get_resource_by_type('LoadBalancerPool')
+
+    def cleanup_ncp_persistence_profiles(self):
+        persistence_profiles = self.get_ncp_persistence_profiles()
+        print("Number of persistence profiles rules to be deleted: %s" %
+              len(persistence_profiles))
+        if not self._remove:
+            return
+        for persistence_profile in persistence_profiles:
+            try:
+                self.delete_resource_by_type_and_id('PersistenceProfile',
+                                                    persistence_profile['id'])
+            except Exception as e:
+                print("ERROR: Failed to delete persistence profile %s-%s, "
+                      "error %s" % (persistence_profile['display_name'],
+                                    persistence_profile['id'], e))
+            else:
+                print("Successfully deleted persistence profile %s-%s" %
+                      (persistence_profile['display_name'],
+                       persistence_profile['id']))
+
+    def get_ncp_persistence_profiles(self):
+        return self.get_ncp_resources(
+            self.get_resource_by_type('PersistenceProfile'))
 
     def get_ip_blocks(self):
         return self.get_resource_by_type('IpBlock')
@@ -964,15 +989,13 @@ class NSXClient(object):
                 print("Successfully deleted ip_block %s-%s" %
                       (ip_block['display_name'], ip_block['id']))
 
-    def cleanup_ncp_ha_switching_profiles(self):
+    def cleanup_ncp_switching_profiles(self):
         ncp_switching_profiles = self.get_ncp_switching_profiles()
-        switching_profiles = [sp for sp in ncp_switching_profiles if 'tags' in
-                              sp if self._is_ncp_ha_resource(sp['tags'])]
         print("Number of switching profiles to be deleted: %s" %
-              len(switching_profiles))
+              len(ncp_switching_profiles))
         if not self._remove:
             return
-        for switching_profile in switching_profiles:
+        for switching_profile in ncp_switching_profiles:
             try:
                 self.delete_resource_by_type_and_id('SwitchingProfile',
                                                     switching_profile['id'])
@@ -1032,6 +1055,24 @@ class NSXClient(object):
                       (l7_resource_cert['display_name'],
                        l7_resource_cert['id']))
 
+    def authenticate(self):
+        # make a get call to make sure response is not forbidden
+        full_url = self._resource_url('TransportZone')
+        if self.use_cert:
+            response = requests.get('https://' + full_url, cert=(self.nsx_cert,
+                                                                 self.key),
+                                headers=self.header,
+                                verify=False)
+        else:
+            response = requests.get('https://' + full_url,
+                                    auth=(self.username, self.password),
+                                    headers=self.header,
+                                    verify=False)
+        if response.status_code == requests.codes.forbidden:
+            print("ERROR: Authentication failed! "
+                  "Please check your credentials.")
+            exit(1)
+
     def cleanup_all(self):
         """
         Cleanup steps:
@@ -1055,6 +1096,7 @@ class NSXClient(object):
         self.cleanup_ncp_lb_virtual_servers()
         self.cleanup_ncp_lb_rules()
         self.cleanup_ncp_lb_pools()
+        self.cleanup_ncp_persistence_profiles()
         self.cleanup_ncp_tier0_logical_ports()
         self.cleanup_ncp_logical_ports()
         self.cleanup_ncp_logical_routers()
@@ -1063,9 +1105,9 @@ class NSXClient(object):
         self.cleanup_ncp_snat_rules()
         self.cleanup_ncp_ip_pools()
         self.cleanup_ncp_l7_resource_certs()
+        self.cleanup_ncp_switching_profiles()
         if self._all_res:
             self.cleanup_ncp_ip_blocks()
-            self.cleanup_ncp_ha_switching_profiles()
             self.cleanup_ncp_external_ip_pools()
 
 
