@@ -18,6 +18,8 @@ use_cert: false
 nsx_manager_ip: 10.161.115.70
 nsx_edge_cluster_name: edgecluster1
 nsx_transport_zone_name: 1-transportzone-460
+
+# No need to specify if BMC is set to false
 os_node_name_list: osmaster
 node_network_cidr: 172.10.0.1/16
 vc_host: 10.161.107.101
@@ -32,9 +34,11 @@ snat_ippool_name: externalIP
 snat_ippool_cidr: 172.30.0.0/16
 start_range: 172.30.0.1
 end_range: 172.30.255.254
+cluster_name: occl-one
+
+# No need to specify if BMC is set to true
 nsx_node_ls_name: node_ls
 nsx_node_lr_name: node_lr
-cluster_name: occl-one
 
 apiserver_host_ip: 10.161.125.73
 use_native_loadbalancer: False

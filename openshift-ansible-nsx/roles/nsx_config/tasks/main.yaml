@@ -8,7 +8,7 @@
   yum:
     name: python-devel
     state: latest
-  when: dep_info.failed == true
+  when: dep_info.failed == true and BMC == false
 
 - name: Install vmware-nsxlib
   pip:
@@ -22,26 +22,26 @@
     repo: "https://github.com/vmware/vsphere-automation-sdk-python"
     dest: /tmp/vsphere-automation-sdk-python/
     version: v6.6.1
-  when: dep_info.failed == true
+  when: dep_info.failed == true and BMC == false
 
 - name: Install VSphere Automation SDK
   pip:
     requirements: /tmp/vsphere-automation-sdk-python/requirements.txt
     extra_args: --extra-index-url /tmp/vsphere-automation-sdk-python/lib/
     state: present
-  when: dep_info.failed == true
+  when: dep_info.failed == true and BMC == false
 
 - name: remove vsphere sdk git dir
   file:
     path: /tmp/vsphere-automation-sdk-python/
     state: absent
-  when: dep_info.failed == true
+  when: dep_info.failed == true and BMC == false
 
 - name: Install pyOpenSSL 16.2.0
   pip:
     name: pyOpenSSL
     version: 16.2.0
-  when: dep_info.failed == true
+  when: dep_info.failed == true and BMC == false
 
 - name: NSX management plane resource configuration with cert
   command: "python '{{ playbook_dir }}'/../nsx_config.py --cert {{ nsx_cert_file_path }} --BMC {{ BMC }} --tn {{ nsx_transport_node_names }} --mp {{ nsx_manager_ip }} --k8scluster {{ cluster_name }} --edge_cluster {{ nsx_edge_cluster_name }} --tz {{ nsx_transport_zone_name }} --t0 {{ nsx_t0_router_name }} --pod_ipblock_name {{ pod_ipblock_name }} --pod_ipblock_cidr {{ pod_ipblock_cidr }} --snat_ippool_name {{ snat_ippool_name }} --snat_ippool_cidr {{ snat_ippool_cidr }} --start_range {{ start_range }} --end_range {{ end_range }} --node {{ os_node_name_list }} --node_ls {{ nsx_node_ls_name }} --node_lr {{ nsx_node_lr_name }} --node_network_cidr {{ node_network_cidr }} --vc_host {{ vc_host }} --vc_user {{ vc_user }} --vc_password {{ vc_password }} --vms {{ vms }}"
