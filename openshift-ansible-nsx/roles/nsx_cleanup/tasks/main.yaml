@@ -1,20 +1,14 @@
 ---
-# In case vmware-nsxlib is not installed
-- name: Install vmware-nsxlib
-  pip:
-    name: vmware-nsxlib
-    state: present
-
 - name: Cleanup nsx resource with nsx_cert and priv_key
   command: "python {{ nsx_cleanup_script_path }} --nsx-cert {{ nsx_api_cert_file }}
   --key {{ nsx_api_private_key_file }} --mgr-ip {{ nsx_manager_ip }}
-  --cluster {{ cluster_name }} --read-only no --shared-t0 no"
+  --cluster {{ cluster_name }} --remove --t0-uuid {{ t0_uuid }} --no-warning"
   register: cleanup_out
   when: use_cert == true
 
 - name: Cleanup nsx resource with username/password
   command: "python {{ nsx_cleanup_script_path }} --username {{ nsx_api_user }}
   --password {{ nsx_api_password }} --mgr-ip {{ nsx_manager_ip }}
-  --cluster {{ cluster_name }} --read-only no --shared-t0 no"
+  --cluster {{ cluster_name }} --remove --t0-uuid {{ t0_uuid }} --no-warning"
   register: cleanup_out
   when: use_cert == false
