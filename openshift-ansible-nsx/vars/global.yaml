@@ -54,3 +54,8 @@ t0_uuid: <t0_uuid>
 # Uncomment and set correct path for the following two lines if use_cert is set to true
 # nsx_api_cert_file: <nsx_api_cert_path>
 # nsx_api_private_key_file: <nsx_api_priv_path>
+
+# specify openshift version when using openshift_installation
+perform_openshift_installation: True
+host_path: "{{ inventory_dir }}"
+openshift_version: release-3.11
