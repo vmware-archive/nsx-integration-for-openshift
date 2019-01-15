@@ -52,3 +52,8 @@ nsx_transport_node_names: <nsx_transport_node_name>
 
 # set to true is manual start of kube proxy is needed
 manual_start_kube_proxy: false
+
+# specify openshift version when using openshift_installation
+perform_openshift_installation: True
+host_path: "{{ inventory_dir }}"
+openshift_version: release-3.11 
