@@ -1,4 +1,7 @@
 ---
+- name: Pip install requests 2.21.0
+  command: "pip install requests==2.21.0"
+
 - name: Cleanup nsx resource with nsx_cert and priv_key
   command: "python {{ nsx_cleanup_script_path }} --nsx-cert {{ nsx_api_cert_file }}
   --key {{ nsx_api_private_key_file }} --mgr-ip {{ nsx_manager_ip }}
