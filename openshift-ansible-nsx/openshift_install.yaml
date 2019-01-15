@@ -1,5 +1,7 @@
 ---
 - hosts: masters[0]
+  vars_files:
+    - vars/global.yaml
   roles:
     - openshift_installation
 

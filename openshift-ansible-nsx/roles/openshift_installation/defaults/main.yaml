@@ -1,3 +1,0 @@
----
-perform_openshift_installation: True
-host_path: "{{ inventory_dir }}"
