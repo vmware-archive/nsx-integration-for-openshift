@@ -147,11 +147,19 @@
     regexp: "#overlay_tz = <None>"
     replace: "overlay_tz = {{ nsx_transport_zone_name }}"
 
+## Configure NSX top router name. From NSX 2.4.0 release onwards this is called
+## top_tier_router before this it is tier0_router.
 - name: Specify T0 router in ncp-rc
   replace:
     path: /tmp/ncp-rc.yml
     regexp: "#tier0_router = <None>"
     replace: "tier0_router = {{ nsx_t0_router_name }}"
+
+- name: Specify Top T0 router in ncp-rc
+  replace:
+    path: /tmp/ncp-rc.yml
+    regexp: "#top_tier_router = <None>"
+    replace: "top_tier_router = {{ nsx_t0_router_name }}"
 
 - name: Specify container_ip_blocks in ncp-rc
   replace:
