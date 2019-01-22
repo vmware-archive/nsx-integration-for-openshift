@@ -3,7 +3,7 @@
   git:
       repo: "https://github.com/openshift/openshift-ansible.git"
       dest: /tmp/openshift-ansible
-      version: release-3.9
+      version: "{{ openshift_version }}"
   when: perform_openshift_installation == True
 
 - name: Run Openshift installation prerequisit

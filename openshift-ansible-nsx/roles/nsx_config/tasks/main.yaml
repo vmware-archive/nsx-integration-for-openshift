@@ -23,6 +23,9 @@
     version: v6.6.1
 
 - name: Install vmware-nsxlib
+  command: "/tmp/nsx-config/bin/pip install vmware-nsxlib==11.1.4"
+
+- name: Install VSphere Automation SDK
   command: "/tmp/nsx-config/bin/pip install -r /tmp/vsphere-automation-sdk-python/requirements.txt --extra-index-url /tmp/vsphere-automation-sdk-python/lib/"
 
 - name: Remove OpenSSL in virtualenv

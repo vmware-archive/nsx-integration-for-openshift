@@ -28,7 +28,7 @@ class NSXClient(object):
     """Base NSX REST client"""
 
     def __init__(self, host, username, password, nsx_cert, key,
-                 ca_cert, cluster, remove, t0_uuid, all_res):
+                 ca_cert, cluster, remove, t0_name, all_res):
         self.host = host
         self.username = username
         self.password = password
@@ -38,7 +38,7 @@ class NSXClient(object):
         self.ca_cert = ca_cert
         self._cluster = cluster
         self._remove = remove
-        self._t0_uuid = t0_uuid
+        self._t0_name = t0_name
         self._all_res = all_res
         self.resource_to_url = {
             'TransportZone': '/transport-zones',
@@ -67,15 +67,14 @@ class NSXClient(object):
         self._t0 = self._get_tier0_routers()
 
     def _get_tier0_routers(self):
-        if not self._t0_uuid:
-            all_t0_routers = self.get_logical_routers(tier='TIER0')
+        all_t0_routers = self.get_logical_routers(tier='TIER0')
+        if not self._t0_name:
             tier0_routers = self.get_ncp_resources(all_t0_routers)
         else:
-            router_response = self.get_logical_routers_by_uuid(self._t0_uuid)
-            if router_response.get('httpStatus') == 'NOT_FOUND':
-                tier0_routers = []
-            else:
-                tier0_routers = [router_response]
+            tier0_routers = []
+            for _t0_router in all_t0_routers:
+                if self._t0_name == _t0_router['display_name']:
+                    tier0_routers.append(_t0_router)
         if not tier0_routers:
             raise Exception("Error: Missing cluster tier-0 router")
         if len(tier0_routers) > 1:
@@ -1141,8 +1140,8 @@ if __name__ == "__main__":
     parser.add_option("-r", "--remove", action='store_true',
                       dest="remove", help="CAVEAT: Removes NSX resources. "
                                           "If not set will do dry-run.")
-    parser.add_option("--t0-uuid", dest="t0_uuid",
-                      help="Specify the tier-0 router uuid. Must be "
+    parser.add_option("--t0-name", dest="t0_name",
+                      help="Specify the tier-0 router name. Must be "
                            "specified if Tier-0 router does not have the "
                            "cluster tag")
     parser.add_option("--all-res", dest="all_res",
@@ -1167,6 +1166,6 @@ if __name__ == "__main__":
                            ca_cert=options.ca_cert,
                            cluster=options.cluster,
                            remove=options.remove,
-                           t0_uuid=options.t0_uuid,
+                           t0_name=options.t0_name,
                            all_res=options.all_res)
     nsx_client.cleanup_all()
