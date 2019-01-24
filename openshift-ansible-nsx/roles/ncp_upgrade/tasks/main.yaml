@@ -1,0 +1,45 @@
+---
+- name: Download CNI rpm
+  get_url:
+    url: "{{ cni_url }}"
+    dest: /tmp/cni.rpm
+    force: yes
+
+- name: Upgrade CNI
+  yum:
+    name: /tmp/cni.rpm
+    state: present
+
+- name: Download OVS
+  get_url:
+    url: "{{ ovs_url }}"
+    dest: /tmp/ovs.rpm
+    force: yes
+
+- name: Download OVS kmod
+  get_url:
+    url: "{{ kmod_ovs_url }}"
+    dest: /tmp/kmod_ovs.rpm
+    force: yes
+
+- name: Upgrade OVS
+  yum:
+    name: /tmp/ovs.rpm
+    state: present
+  tags: ovs
+
+- name: Upgrade OVS Kernel Module
+  yum:
+    name: /tmp/kmod_ovs.rpm
+    state: present
+
+## Get NCP tar file and make it docker image
+- name: Download ncp image tar file
+  get_url:
+    url: "{{ ncp_image_url }}"
+    dest: /tmp/nsx_ncp_rhel.tar
+    force: yes
+
+## Using docker_image to load tar file to docker image
+- name: Load image from the image tar file
+  shell: docker load -i /tmp/nsx_ncp_rhel.tar

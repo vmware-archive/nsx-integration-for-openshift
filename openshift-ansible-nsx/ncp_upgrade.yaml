@@ -1,0 +1,34 @@
+# to run: ansible-playbook -i /PATH/TO/HOSTS/hosts ncp_upgrade.yaml
+---
+# run the ncp_upgrade role on each node of the cluster
+- hosts: OSEv3
+  vars_files:
+    - vars/global.yaml
+  roles:
+    - ncp_upgrade
+- hosts: jumphost
+  vars_files:
+    - vars/global.yaml
+  tasks:
+  ## Update NCP and Node agent
+  - name: Register the docker image name
+    shell: docker images | grep nsx-ncp-rhel | head -n1
+    register: nsx_ncp_rhel
+
+  - name: Switch to nsx-system project
+    command: oc project nsx-system
+
+  - name: Rolling update NCP Replication controller
+    shell: kubectl rolling-update nsx-ncp --image "{{ nsx_ncp_rhel.stdout.split()[0] }} -n nsx-system"
+
+  - name: Change image of nsx-node-agent
+    shell: oc set image ds/nsx-node-agent nsx-node-agent="{{ nsx_ncp_rhel.stdout.split()[0] }} -n nsx-system"
+
+  - name: Change image of nsx-kube-proxy
+    shell: oc set image ds/nsx-node-agent nsx-kube-proxy="{{ nsx_ncp_rhel.stdout.split()[0] }} -n nsx-system"
+
+  - name: Trace nsx-node-agent ds status
+    shell: kubectl rollout status ds/nsx-node-agent
+
+  - name: Switch to default project
+    command: oc project default
