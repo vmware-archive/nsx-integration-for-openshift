@@ -49,7 +49,7 @@ class TinyClient(object):
         nsxlib_config = config.NsxLibConfig(
             username=args.mp_user,
             password=args.mp_password,
-            nsx_api_managers=[args.mp_ip],
+            nsx_api_managers=args.mp_ip.split(','),
             ca_file=args.mp_cert_file)
         self.nsxlib = v3.NsxLib(nsxlib_config)
         self.content_type = "application/json"
