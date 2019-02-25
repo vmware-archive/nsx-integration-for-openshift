@@ -4,6 +4,11 @@
     name: python-devel
     state: latest
 
+- name: Install gcc
+  yum:
+    name: gcc
+    state: present
+
 - name: Install virtualenv
   pip:
     name: virtualenv
