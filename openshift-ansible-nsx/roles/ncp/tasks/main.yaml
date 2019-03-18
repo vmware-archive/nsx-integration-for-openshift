@@ -57,6 +57,13 @@
     regexp: "# - routes"
     replace: "- routes"
 
+- name: Comment out apiGroup for bmc env
+  replace:
+    path: /tmp/ncp-rbac.yml
+    regexp: "apiGroup: rbac.authorization.k8s.io"
+    replace: "# apiGroup: rbac.authorization.k8s.io"
+  when: BMC == true or BMC == True
+
 - name: Apply ncp-rbac
   command: oc apply -f /tmp/ncp-rbac.yml
 
@@ -100,6 +107,13 @@
     url: "{{ ncp_scc_yaml_url }}"
     dest: /tmp/ncp-os-scc.yml
     force: yes
+
+- name: Set DAC_OVERRIDE in ncp-os-scc
+  replace:
+        path: /tmp/ncp-os-scc.yml
+        regexp: "# - DAC_OVERRIDE"
+        replace: "- DAC_OVERRIDE"
+  when: BMC == true or BMC == True
 
 - name: Load ncp-scc
   command: oc apply -f /tmp/ncp-os-scc.yml
@@ -227,6 +241,13 @@
         replace: "nsx_api_private_key_file = /etc/nsx-ujo/nsx_priv_key"
   when: use_cert == true
 
+- name: Set node_type to BAREMETAL for bmc env
+  replace:
+        path: /tmp/ncp-rc.yml
+        regexp: "#node_type = HOSTVM"
+        replace: "node_type = BAREMETAL"
+  when: BMC == true or BMC == True
+
 # Ensure idempotency
 - name: Check whether /tmp/ncp-rc.yml contains "nsx-priv-key"
   command: grep "nsx-priv-key" /tmp/ncp-rc.yml
@@ -302,6 +323,69 @@
     path: /tmp/nsx-node-agent-ds.yml
     regexp: "^ *#?apiserver_host_port =.*"
     line: "    apiserver_host_port = 8443"
+
+- name: Set node_type to BAREMETAL for bmc env for node-agent
+  replace:
+        path: /tmp/nsx-node-agent-ds.yml
+        regexp: "#node_type = HOSTVM"
+        replace: "node_type = BAREMETAL"
+  when: BMC == true or BMC == True
+
+- name: Set ovs_bridge to BAREMETAL for bmc env for node-agent
+  replace:
+        path: /tmp/nsx-node-agent-ds.yml
+        regexp: "#ovs_bridge = br-int"
+        replace: "ovs_bridge = nsx-managed"
+  when: BMC == true or BMC == True
+
+- name: Set DAC_OVERRIDE for bmc env for node-agent
+  replace:
+        path: /tmp/nsx-node-agent-ds.yml
+        regexp: "# - DAC_OVERRIDE"
+        replace: "- DAC_OVERRIDE"
+  when: BMC == true or BMC == True
+
+- name: Mount nestdb-sock for bmc env for node-agent
+  replace:
+        path: /tmp/nsx-node-agent-ds.yml
+        regexp: "# - name: nestdb-sock"
+        replace: "- name: nestdb-sock"
+  when: BMC == true or BMC == True
+
+- name: Mount nestdb-sock for bmc env for node-agent
+  replace:
+        path: /tmp/nsx-node-agent-ds.yml
+        regexp: "#   mountPath: /var/run/vmware/nestdb/nestdb-server.sock"
+        replace: "  mountPath: /var/run/vmware/nestdb/nestdb-server.sock"
+  when: BMC == true or BMC == True
+
+- name: Volume nestdb-sock for bmc env for node-agent
+  replace:
+        path: /tmp/nsx-node-agent-ds.yml
+        regexp: "# - name: nestdb-sock"
+        replace: "- name: nestdb-sock"
+  when: BMC == true or BMC == True
+
+- name: Volume nestdb-sock for bmc env for node-agent
+  replace:
+        path: /tmp/nsx-node-agent-ds.yml
+        regexp: "#   hostPath:"
+        replace: "  hostPath:"
+  when: BMC == true or BMC == True
+
+- name: Volume nestdb-sock for bmc env for node-agent
+  replace:
+        path: /tmp/nsx-node-agent-ds.yml
+        regexp: "#     path: /var/run/vmware/nestdb/nestdb-server.sock"
+        replace: "    path: /var/run/vmware/nestdb/nestdb-server.sock"
+  when: BMC == true or BMC == True
+
+- name: Volume nestdb-sock for bmc env for node-agent
+  replace:
+        path: /tmp/nsx-node-agent-ds.yml
+        regexp: "#     type: Socket"
+        replace: "    type: Socket"
+  when: BMC == true or BMC == True
 
 - name: Override default node selector
   command: oc patch namespace nsx-system -p '{"metadata":{"annotations":{"openshift.io/node-selector":""}}}'

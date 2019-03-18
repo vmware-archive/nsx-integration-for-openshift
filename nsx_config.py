@@ -14,17 +14,6 @@ from urllib import urlencode
 from vmware_nsxlib import v3  # noqa
 from vmware_nsxlib.v3 import config  # noqa
 
-from com.vmware import cis_client
-from com.vmware.vcenter.vm import hardware_client
-from com.vmware import vcenter_client
-import requests
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
-from vmware.vapi.lib.connect import get_requests_connector
-from vmware.vapi.security.session import create_session_security_context
-from vmware.vapi.security.user_password import \
-    create_user_password_security_context
-from vmware.vapi.stdlib.client.factories import StubConfigurationFactory
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -172,6 +161,10 @@ def getargs():
                         default="Admin!23Admin",
                         help='Optional. The MP password. Default: '
                              'Admin!23Admin')
+    parser.add_argument('--BMC',
+                        dest="for_BMC",
+                        default="false",
+                        help='Will disable configure node_ls, node_lr')
     parser.add_argument('--k8scluster',
                         dest="k8scluster",
                         default="",
@@ -186,6 +179,10 @@ def getargs():
                         default="",
                         help='Name of the transport zone to be created and '
                              'tagged. ')
+    parser.add_argument('--tn',
+                        dest="tn",
+                        default="",
+                        help='Name of the transport node to be tagged. ')
     parser.add_argument('--t0',
                         dest="t0",
                         default="",
@@ -302,15 +299,25 @@ def add_tag(py_dict, tag_dict):
 
 
 class VMNetworkManager(object):
+
     def __init__(self, args):
         self.host = args.vc_host
         self.user = args.vc_user
         self.pwd = args.vc_password
-        self.skip_verfication = args.skip_verfication
-        self.cert_path = args.cert_path
-        self.vms = args.vms
         self.node_ls_name = args.node_ls
         self.node_list = args.node_list
+        from com.vmware import cis_client
+        from com.vmware.vcenter.vm import hardware_client
+        from com.vmware import vcenter_client
+        import requests
+        from requests.packages.urllib3.exceptions import InsecureRequestWarning
+        from vmware.vapi.lib.connect import get_requests_connector
+        from vmware.vapi.security.session import \
+            create_session_security_context
+        from vmware.vapi.security.user_password import \
+            create_user_password_security_context
+        from vmware.vapi.stdlib.client.factories import \
+            StubConfigurationFactory
 
     def get_jsonrpc_endpoint_url(self, host):
         # The URL for the stub requests are made against the /api HTTP
@@ -486,6 +493,7 @@ class NSXResourceManager(object):
 
         self.resource_to_url = {
             'TransportZone': 'transport-zones',
+            'TransportNode': 'transport-nodes',
             'LogicalRouter': 'logical-routers',
             'IpBlock': 'pools/ip-blocks',
             'IpPool': 'pools/ip-pools',
@@ -579,14 +587,16 @@ class NSXResourceManager(object):
 class ConfigurationManager(object):
     def __init__(self, args, api_client):
         self.resource_manager = NSXResourceManager(api_client)
-        self.vm_network_manager = VMNetworkManager(args)
 
         self.manager_ip = args.mp_ip
         self.username = args.mp_user
         self.password = args.mp_password
 
+        self.for_bmc = False if args.for_BMC == 'false' else True
+
         self.cluster_name = args.k8scluster
         self.transport_zone_name = args.tz
+        self.transport_node_names = args.tn.split(',')
 
         self.t0_router_name = args.t0
         self.edge_cluster_name = args.edge_cluster
@@ -598,12 +608,14 @@ class ConfigurationManager(object):
         self.start_range = args.start_range
         self.end_range = args.end_range
 
-        self.mac_to_node_name = {}
-        self.node_ls_name = args.node_ls
-        self.node_lr_name = args.node_lr
-        self.node_network_cidr = args.node_network_cidr
-        self.vm_list = args.vms.split(',')
-        self.node_list = args.node_list.split(',')
+        if not self.for_bmc:
+            self.vm_network_manager = VMNetworkManager(args)
+            self.mac_to_node_name = {}
+            self.node_ls_name = args.node_ls
+            self.node_lr_name = args.node_lr
+            self.node_network_cidr = args.node_network_cidr
+            self.vm_list = args.vms.split(',')
+            self.node_list = args.node_list.split(',')
 
     def _has_tags(self, resource, required_tags):
         if not required_tags:
@@ -656,6 +668,18 @@ class ConfigurationManager(object):
             'TransportZone', self.transport_zone_name, params, required_tags,
             use_search_api=False)
         sys.stdout.write("overlay_tz: %s " % overlay_tz['id'])
+
+    def handle_transport_node(self):
+        for transport_node_name in self.transport_node_names:
+            required_tags = [{"scope": NCP_CLUSTER_KEY,
+                              "tag": self.cluster_name},
+                             {"scope": NCP_NODE_KEY,
+                              "tag": transport_node_name}]
+            transport_node = self._handle_general_configuration(
+                'TransportNode', transport_node_name, None, None,
+                use_search_api=False)
+            transport_node['tags'] = required_tags
+            self.resource_manager.update_resource(transport_node)
 
     def handle_t0_router(self):
         edge_cluster = self.resource_manager.get_resource_by_type_and_name(
@@ -881,8 +905,11 @@ class ConfigurationManager(object):
         self.handle_transport_zone()
         self.handle_t0_router()
         self.handle_ipblocks()
-        self.handle_vif()
-        self.handle_t1_router()
+        if not self.for_bmc:
+            self.handle_vif()
+            self.handle_t1_router()
+        else:
+            self.handle_transport_node()
 
 
 def main():
