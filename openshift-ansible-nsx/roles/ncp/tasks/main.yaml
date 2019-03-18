@@ -8,7 +8,7 @@
   when: manual_start_kube_proxy != false
 
 - name: create create_proxy under playbooks dir
-  shell: "echo '---\n- import_playbook: byo/openshift_facts.yml\n- hosts: OSEv3' > {{ openshift_dir }}/playbooks/create_proxy.yaml"
+  shell: "echo '---\n- import_playbook: byo/openshift_facts.yml\n- hosts: masters' > {{ openshift_dir }}/playbooks/create_proxy.yaml"
   when: manual_start_kube_proxy != false
 
 - name: create create_proxy under playbooks dir
