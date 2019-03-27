@@ -592,7 +592,7 @@ class ConfigurationManager(object):
         self.username = args.mp_user
         self.password = args.mp_password
 
-        self.for_bmc = False if args.for_BMC == 'false' else True
+        self.for_bmc = False if args.for_BMC.lower() == 'false' else True
 
         self.cluster_name = args.k8scluster
         self.transport_zone_name = args.tz
