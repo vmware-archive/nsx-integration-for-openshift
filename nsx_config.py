@@ -10,6 +10,8 @@ import json
 import logging
 import sys
 import time
+import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from urllib import urlencode
 from vmware_nsxlib import v3  # noqa
 from vmware_nsxlib.v3 import config  # noqa
@@ -306,16 +308,23 @@ class VMNetworkManager(object):
         self.pwd = args.vc_password
         self.node_ls_name = args.node_ls
         self.node_list = args.node_list
+        self.skip_verfication = args.skip_verfication
+        self.vms = args.vms
+        global cis_client
         from com.vmware import cis_client
+        global hardware_client
         from com.vmware.vcenter.vm import hardware_client
+        global vcenter_client
         from com.vmware import vcenter_client
-        import requests
-        from requests.packages.urllib3.exceptions import InsecureRequestWarning
+        global get_requests_connector
         from vmware.vapi.lib.connect import get_requests_connector
+        global create_session_security_context
         from vmware.vapi.security.session import \
             create_session_security_context
+        global create_user_password_security_context
         from vmware.vapi.security.user_password import \
             create_user_password_security_context
+        global StubConfigurationFactory
         from vmware.vapi.stdlib.client.factories import \
             StubConfigurationFactory
 
