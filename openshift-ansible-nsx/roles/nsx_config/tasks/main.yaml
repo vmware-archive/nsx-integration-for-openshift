@@ -52,60 +52,20 @@
 - name: NSX management plane resource configuration with cert
   command: "/tmp/nsx-config/bin/python '{{ playbook_dir }}'/../nsx_config.py --cert {{ nsx_cert_file_path }} --BMC {{ BMC }} --tn {{ nsx_transport_node_names }} --mp {{ nsx_manager_ip }} --k8scluster {{ cluster_name }} --edge_cluster {{ nsx_edge_cluster_name }} --tz {{ nsx_transport_zone_name }} --t0 {{ nsx_t0_router_name }} --pod_ipblock_name {{ pod_ipblock_name }} --pod_ipblock_cidr {{ pod_ipblock_cidr }} --snat_ippool_name {{ snat_ippool_name }} --snat_ippool_cidr {{ snat_ippool_cidr }} --start_range {{ start_range }} --end_range {{ end_range }} --node {{ os_node_name_list }} --node_ls {{ nsx_node_ls_name }} --node_lr {{ nsx_node_lr_name }} --node_network_cidr {{ node_network_cidr }} --vc_host {{ vc_host }} --vc_user {{ vc_user }} --vc_password {{ vc_password }} --vms {{ vms }}"
   when: perform_nsx_config == True and use_cert == True and BMC == false
-  register: nsx_config_result
 
 - name: NSX management plane resource configuration with user name
   command: "/tmp/nsx-config/bin/python '{{ playbook_dir }}'/../nsx_config.py --user {{ nsx_api_user }} --password {{ nsx_api_password }} --BMC {{ BMC }} --tn {{ nsx_transport_node_names }} --mp {{ nsx_manager_ip }} --k8scluster {{ cluster_name }} --edge_cluster {{ nsx_edge_cluster_name }} --tz {{ nsx_transport_zone_name }} --t0 {{ nsx_t0_router_name }} --pod_ipblock_name {{ pod_ipblock_name }} --pod_ipblock_cidr {{ pod_ipblock_cidr }} --snat_ippool_name {{ snat_ippool_name }} --snat_ippool_cidr {{ snat_ippool_cidr }} --start_range {{ start_range }} --end_range {{ end_range }} --node {{ os_node_name_list }} --node_ls {{ nsx_node_ls_name }} --node_lr {{ nsx_node_lr_name }} --node_network_cidr {{ node_network_cidr }} --vc_host {{ vc_host }} --vc_user {{ vc_user }} --vc_password {{ vc_password }} --vms {{ vms }}"
   when: perform_nsx_config == True and use_cert == False and BMC == false
-  register: nsx_config_result
 
 - name: BMC NSX management plane resource configuration with cert
   command: "/tmp/nsx-config/bin/python '{{ playbook_dir }}'/../nsx_config.py --cert {{ nsx_cert_file_path }} --BMC {{ BMC }} --tn {{ nsx_transport_node_names }} --mp {{ nsx_manager_ip }} --k8scluster {{ cluster_name }} --edge_cluster {{ nsx_edge_cluster_name }} --tz {{ nsx_transport_zone_name }} --t0 {{ nsx_t0_router_name }} --pod_ipblock_name {{ pod_ipblock_name }} --pod_ipblock_cidr {{ pod_ipblock_cidr }} --snat_ippool_name {{ snat_ippool_name }} --snat_ippool_cidr {{ snat_ippool_cidr }} --start_range {{ start_range }} --end_range {{ end_range }}"
   when: perform_nsx_config == True and use_cert == True and BMC != false
-  register: nsx_config_result
 
 - name: BMC NSX management plane resource configuration with user name
   command: "/tmp/nsx-config/bin/python '{{ playbook_dir }}'/../nsx_config.py --user {{ nsx_api_user }} --password {{ nsx_api_password }} --BMC {{ BMC }} --tn {{ nsx_transport_node_names }} --mp {{ nsx_manager_ip }} --k8scluster {{ cluster_name }} --edge_cluster {{ nsx_edge_cluster_name }} --tz {{ nsx_transport_zone_name }} --t0 {{ nsx_t0_router_name }} --pod_ipblock_name {{ pod_ipblock_name }} --pod_ipblock_cidr {{ pod_ipblock_cidr }} --snat_ippool_name {{ snat_ippool_name }} --snat_ippool_cidr {{ snat_ippool_cidr }} --start_range {{ start_range }} --end_range {{ end_range }}"
   when: perform_nsx_config == True and use_cert == False and BMC != false
-  register: nsx_config_result
 
 - name: remove nsx-config virtualenv
   file:
     state: absent
     path: "/tmp/nsx-config"
-
-- name: Showing nsx_config stdout
-  debug:
-    msg: "{{ nsx_config_result.stdout }}"
-
-- name: register overlay_tz id
-  shell: "echo {{ nsx_config_result.stdout }} | awk '{print $2}'"
-  register: overlay_tz_id
-
-- name: Showing overlay_tz id
-  debug:
-    msg: "Overlay_tz id: {{ overlay_tz_id.stdout }}"
-
-- name: register T0 id
-  shell: "echo {{ nsx_config_result.stdout }} | awk '{print $4}'"
-  register: t0_id
-
-- name: Showing T0 router id
-  debug:
-    msg: "T0 id: {{ t0_id.stdout }}"
-
-- name: register container_ip_blocks id
-  shell: "echo {{ nsx_config_result.stdout }} | awk '{print $6}'"
-  register: container_ip_blocks_id
-
-- name: Showing container_ip_blocks id
-  debug:
-    msg: "container_ip_blocks id: {{ container_ip_blocks_id.stdout }}"
-
-- name: register external_ip_pools id
-  shell: "echo {{ nsx_config_result.stdout }} | awk '{print $8}'"
-  register: external_ip_pools_id
-
-- name: Showing external_ip_pools id
-  debug:
-    msg: "external_ip_pools id: {{ external_ip_pools_id.stdout }}"
