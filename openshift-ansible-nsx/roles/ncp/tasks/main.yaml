@@ -205,6 +205,14 @@
     regexp: "^ *#?nsx_api_managers =.*"
     line: "    nsx_api_managers = {{ nsx_manager_ip }}"
 
+- name: Set NSX Policy Flag
+  lineinfile:
+    path: /tmp/ncp-rc.yml
+    regexp: "^    policy_nsxapi"
+    insertafter: "^ *nsx_api_managers"
+    line: "    policy_nsxapi = {{ policy_nsxapi | replace('$', '$$') }}"
+  when: use_cert != true
+
 - name: Set NSX API password
   lineinfile:
     path: /tmp/ncp-rc.yml

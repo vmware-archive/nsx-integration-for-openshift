@@ -19,6 +19,9 @@ nsx_manager_ip: 10.161.115.70
 nsx_edge_cluster_name: edgecluster1
 nsx_transport_zone_name: 1-transportzone-460
 
+# Enable NSX Policy
+policy_nsxapi: false
+
 # No need to specify if BMC is set to true
 os_node_name_list: osmaster
 node_network_cidr: 172.10.0.1/16
